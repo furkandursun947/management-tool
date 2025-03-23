@@ -1,0 +1,6 @@
+- Nextjs App Router
+- Typescript
+- Tailwind
+- Shadcn
+- Dark Theme
+- Localization
