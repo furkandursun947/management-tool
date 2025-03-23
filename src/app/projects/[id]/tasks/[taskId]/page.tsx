@@ -99,8 +99,7 @@ export default function TaskDetailPage() {
           </p>
           <Button asChild>
             <Link href={project ? `/projects/${project.id}?tab=tasks` : "/projects"}>
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              {project ? "Back to Project Tasks" : "Back to Projects"}
+              Go to {project ? "Project Tasks" : "Projects"}
             </Link>
           </Button>
         </div>
@@ -125,44 +124,39 @@ export default function TaskDetailPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Back button and action buttons */}
-        <div className="flex items-center justify-between">
-          <Button variant="outline" asChild>
-            <Link href={`/projects/${project?.id}?tab=tasks`}>
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Project Tasks
-            </Link>
-          </Button>
-          <div className="flex gap-2">
-            <Button>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Task
-            </Button>
-            <Button variant="destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
-          </div>
-        </div>
 
         {/* Task header */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">{task?.title}</h1>
-            <Badge variant={getTaskStatusVariant(task?.status || "TODO")} className="ml-2">
-              {task?.status}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span className="font-medium">Project:</span>
-            <Link 
-              href={`/projects/${project?.id}`} 
-              className="hover:text-primary hover:underline transition-colors"
-            >
-              {project?.name}
-            </Link>
-            <span className="text-xs">({project?.code})</span>
-          </div>
+        <div className="space-y-2 flex justify-between items-center">
+            <div>
+                <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold tracking-tight">{task?.title}</h1>
+                <Badge variant={getTaskStatusVariant(task?.status || "TODO")} className="ml-2">
+                {task?.status}
+                </Badge>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="font-medium">Project:</span>
+                <Link 
+                href={`/projects/${project?.id}`} 
+                className="hover:text-primary hover:underline transition-colors"
+                >
+                {project?.name}
+                </Link>
+                <span className="text-xs">({project?.code})</span>
+            </div>
+            </div>
+            <div>
+            <div className="flex gap-2">
+                <Button>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Task
+                </Button>
+                <Button variant="destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+                </Button>
+            </div>
+            </div>
         </div>
 
         {/* Task details */}

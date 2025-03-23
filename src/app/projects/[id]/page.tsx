@@ -123,8 +123,7 @@ export default function ProjectDetailPage() {
           <p className="text-muted-foreground mb-6">The project you're looking for doesn't exist or has been deleted.</p>
           <Button asChild>
             <Link href="/projects">
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Projects
+              Go to Projects
             </Link>
           </Button>
         </div>
@@ -146,27 +145,23 @@ export default function ProjectDetailPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Back button and edit button */}
-        <div className="flex items-center justify-between">
-          <Button variant="outline" asChild>
-            <Link href="/projects">
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Projects
-            </Link>
-          </Button>
-          <Button>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit Project
-          </Button>
-        </div>
 
         {/* Project header */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">{project?.name}</h1>
-            <Badge className="ml-2">{project?.code}</Badge>
-          </div>
-          <p className="text-muted-foreground">{project?.description}</p>
+        <div className="flex justify-between items-center space-y-2">
+            <div>
+                <div className="flex items-center gap-2">
+                 <h1 className="text-3xl font-bold tracking-tight">{project?.name}</h1>
+                    <Badge className="ml-2">{project?.code}</Badge>
+                </div>
+                <p className="text-muted-foreground">{project?.description}</p>
+            </div>
+            <div>
+                <Button>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Project
+                </Button>
+            </div>
+          
         </div>
 
         {/* Project summary cards */}
