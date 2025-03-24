@@ -3,18 +3,16 @@
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "./theme/theme-toggle";
-import { Bell, Search, User, Menu } from "lucide-react";
+import { Bell, Search, User } from "lucide-react";
 import { Button } from "./ui/button";
+import { MobileSidebar } from "./mobile-sidebar";
 
 export default function Header() {
   return (
     <header className="sticky  top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="w-full flex h-14 items-center px-6">
         <div className="md:hidden mr-2">
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle menu</span>
-          </Button>
+          <MobileSidebar />
         </div>
         <div className="flex items-center">
           <Link href="/" className="flex items-center space-x-2">
