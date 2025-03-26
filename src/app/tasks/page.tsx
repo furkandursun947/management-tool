@@ -12,7 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Project, Task, projects } from "@/data/projects";
 import { format } from "date-fns";
 import { Search, Filter, Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useProjects } from "@/contexts/projects-context";
+import { useAuth } from "@/contexts/firebase-context";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper function to format dates
 const formatDate = (date: Date | null | undefined) => {
@@ -47,22 +49,27 @@ const getTaskStatusVariant = (status: string) => {
   }
 };
 
-// Combine all tasks from all projects
-const getAllTasks = (): (Task & { projectId: string; projectName: string })[] => {
-  return projects.flatMap(project => 
-    project.tasks?.map(task => ({
-      ...task,
-      projectId: project.id,
-      projectName: project.name
-    })) || []
-  );
-};
-
 export default function TasksPage() {
+  const { projects, loading } = useProjects();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [allTasks, setAllTasks] = useState<(Task & { projectId: string; projectName: string })[]>(getAllTasks());
-  const [filteredTasks, setFilteredTasks] = useState<(Task & { projectId: string; projectName: string })[]>(getAllTasks());
+  const [allTasks, setAllTasks] = useState<any[]>([]);
+  const [filteredTasks, setFilteredTasks] = useState<any[]>([]);
+
+  // Get all tasks from Firebase projects
+  useEffect(() => {
+    const tasks = projects.flatMap(project => 
+      project.tasks
+        .filter(task => task.assigneeId === user?.uid)
+        .map(task => ({
+          ...task,
+          projectId: project.id,
+          projectName: project.name
+        }))
+    );
+    setAllTasks(tasks);
+  }, [projects, user?.uid]);
 
   // Apply filters when search query or status filter changes
   useEffect(() => {
@@ -136,7 +143,16 @@ export default function TasksPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTasks.length === 0 ? (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center">
                     No tasks found.

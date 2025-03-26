@@ -14,6 +14,7 @@ import {
   ChevronRight,
   FolderOpen,
   Plus,
+  Shield,
 } from "lucide-react";
 import {
   Collapsible,
@@ -21,8 +22,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useState, useEffect } from "react";
-import { projects } from "@/data/projects";
 import { motion, AnimatePresence } from "framer-motion";
+import { useProjects } from "@/contexts/projects-context";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SidebarItemProps {
   href: string;
@@ -53,6 +55,7 @@ function SidebarItem({ href, icon, title }: SidebarItemProps) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
+  const { projects, loading } = useProjects();
   
   // Auto-expand the projects dropdown if the current route is a project route
   useEffect(() => {
@@ -117,56 +120,68 @@ export default function Sidebar() {
                   >
                     <CollapsibleContent className="pl-6 pt-1">
                       <div className="space-y-1">
-                        {/* Show up to 3 most recent projects */}
-                        {projects.slice(0, 3).map((project, index) => (
-                          <motion.div
-                            key={project.id}
-                            initial={{ opacity: 0, y: -5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            transition={{ 
-                              delay: index * 0.05,
-                              duration: 0.2
-                            }}
-                          >
-                            <Link
-                              href={`/projects/${project.id}`}
-                              className={cn(
-                                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-200",
-                                pathname === `/projects/${project.id}`
-                                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                              )}
-                            >
-                              <FolderOpen className="h-4 w-4" />
-                              <span className="truncate">{project.name}</span>
-                            </Link>
-                          </motion.div>
-                        ))}
-                        {/* Show More option if more than 3 projects */}
-                        {projects.length > 3 && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            transition={{ 
-                              delay: 0.15,
-                              duration: 0.2
-                            }}
-                          >
-                            <Link
-                              href="/projects"
-                              className={cn(
-                                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-200",
-                                pathname === "/projects"
-                                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                              )}
-                            >
-                              <Plus className="h-4 w-4" />
-                              <span>More</span>
-                            </Link>
-                          </motion.div>
+                        {loading ? (
+                          // Loading skeleton for projects
+                          Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="flex items-center gap-2 px-3 py-2">
+                              <Skeleton className="h-4 w-4" />
+                              <Skeleton className="h-4 w-24" />
+                            </div>
+                          ))
+                        ) : (
+                          <>
+                            {/* Show up to 3 most recent projects */}
+                            {projects.slice(0, 3).map((project, index) => (
+                              <motion.div
+                                key={project.id}
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -5 }}
+                                transition={{ 
+                                  delay: index * 0.05,
+                                  duration: 0.2
+                                }}
+                              >
+                                <Link
+                                  href={`/projects/${project.id}`}
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-200",
+                                    pathname === `/projects/${project.id}`
+                                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                                  )}
+                                >
+                                  <FolderOpen className="h-4 w-4" />
+                                  <span className="truncate">{project.name}</span>
+                                </Link>
+                              </motion.div>
+                            ))}
+                            {/* Show More option if more than 3 projects */}
+                            {projects.length > 3 && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -5 }}
+                                transition={{ 
+                                  delay: 0.15,
+                                  duration: 0.2
+                                }}
+                              >
+                                <Link
+                                  href="/projects"
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-200",
+                                    pathname === "/projects"
+                                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                                  )}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  <span>More</span>
+                                </Link>
+                              </motion.div>
+                            )}
+                          </>
                         )}
                       </div>
                     </CollapsibleContent>
@@ -211,6 +226,11 @@ export default function Sidebar() {
             href="/team"
             icon={<Users className="h-4 w-4" />}
             title="Team"
+          />
+          <SidebarItem
+            href="/roles"
+            icon={<Shield className="h-4 w-4" />}
+            title="Roles"
           />
           <SidebarItem
             href="/settings"

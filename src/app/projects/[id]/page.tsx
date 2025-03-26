@@ -25,8 +25,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Project, Task, projects } from "@/data/projects";
 import { AddTaskModal } from "@/components/projects/add-task-modal";
+import { AddMemberModal } from "@/components/projects/add-member-modal";
+import { projectService, Project, TeamMember } from "@/services/project-service";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useRoles } from "@/contexts/roles-context";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ManageRolesModal } from "@/components/projects/manage-roles-modal";
+import { ManageTeamModal } from "@/components/projects/manage-team-modal";
+import { WithProjectPermissions } from "@/components/auth/with-permissions";
+
+interface ProjectWithRoles extends Project {
+  teamMembers: Array<TeamMember & { roleId: string }>;
+}
 
 // Helper function to format dates
 const formatDate = (date: Date | null | undefined) => {
@@ -35,48 +46,30 @@ const formatDate = (date: Date | null | undefined) => {
 };
 
 // Helper function to get status badge variant
-const getStatusVariant = (status: Project["status"]) => {
+const getStatusVariant = (status: string) => {
   switch (status) {
-    case "NOT_STARTED":
-      return "outline";
-    case "IN_PROGRESS":
-      return "secondary";
     case "COMPLETED":
-      return "default";
-    case "ON_HOLD":
-      return "destructive";
-    default:
+      return "secondary";
+    case "IN_PROGRESS":
       return "outline";
+    case "NOT_STARTED":
+      return "default";
+    default:
+      return "default";
   }
 };
 
 // Helper function to get priority badge variant
-const getPriorityVariant = (priority: Project["priority"]) => {
+const getPriorityVariant = (priority: string) => {
   switch (priority) {
-    case "LOW":
-      return "outline";
-    case "MEDIUM":
-      return "secondary";
     case "HIGH":
       return "destructive";
-    default:
+    case "MEDIUM":
       return "outline";
-  }
-};
-
-// Helper function to get task status variant
-const getTaskStatusVariant = (status: Task["status"]) => {
-  switch (status) {
-    case "TODO":
-      return "outline";
-    case "IN_PROGRESS":
+    case "LOW":
       return "secondary";
-    case "DONE":
-      return "default";
-    case "BLOCKED":
-      return "destructive";
     default:
-      return "outline";
+      return "default";
   }
 };
 
@@ -84,39 +77,96 @@ export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const projectId = typeof params.id === "string" ? params.id : params.id?.[0];
+  const { projectRoles } = useRoles();
+  const { hasProjectPermission } = usePermissions();
+  const [showRolesModal, setShowRolesModal] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
-    // In a real app, you would fetch the project from an API
-    const id = typeof params.id === 'string' ? params.id : params.id?.[0];
-    const foundProject = projects.find(p => p.id === id);
-    
-    if (foundProject) {
-      setProject(foundProject);
+    async function fetchProject() {
+      if (!projectId) return;
+      
+      try {
+        const projectData = await projectService.getProject(projectId);
+        setProject(projectData);
+      } catch (error) {
+        console.error("Error fetching project:", error);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    fetchProject();
     
     // Set active tab based on query parameter
     const tabParam = searchParams.get("tab");
     if (tabParam && ["overview", "tasks", "team"].includes(tabParam)) {
       setActiveTab(tabParam);
     }
-    
-    setLoading(false);
-  }, [params.id, searchParams]);
+  }, [projectId, searchParams]);
 
   // Handle changing tabs
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     
     // Update URL without page reload
-    const id = typeof params.id === 'string' ? params.id : params.id?.[0];
-    router.push(`/projects/${id}?tab=${value}`);
+    router.push(`/projects/${projectId}?tab=${value}`);
   };
 
+  // Show loading state
+  if (loading) {
+    return (
+      <Layout>
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/projects">
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <div className="space-y-1">
+              <Skeleton className="h-8 w-[200px]" />
+              <Skeleton className="h-4 w-[300px]" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardHeader className="pb-1">
+                  <Skeleton className="h-4 w-[100px]" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-6 w-[120px]" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-[200px]" />
+              <Skeleton className="h-4 w-[300px]" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </Layout>
+    );
+  }
+
   // Handle case where project is not found
-  if (!loading && !project) {
+  if (!project || !projectId) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -132,366 +182,317 @@ export default function ProjectDetailPage() {
     );
   }
 
-  // Show loading state
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center min-h-[60vh]">
-          <p>Loading project details...</p>
-        </div>
-      </Layout>
-    );
-  }
+  // At this point, we know projectId is a string
+  const safeProjectId = projectId as string;
+  const roles = projectRoles[safeProjectId] || [];
+  const canManageRoles = hasProjectPermission(safeProjectId, "MANAGE_ROLES");
+  const canManageTeam = hasProjectPermission(safeProjectId, "MANAGE_TEAM");
 
   return (
     <Layout>
-      <div className="container mx-auto py-6">
-        <div className="space-y-6">
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/projects">
+              <ChevronLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+            <p className="text-muted-foreground">{project.code}</p>
+          </div>
+        </div>
 
-          {/* Project header */}
-          <div className="flex items-center gap-2 justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">{project?.name}</h1>
-                <Badge className="ml-2">{project?.code}</Badge>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium">Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Badge variant={getStatusVariant(project.status)}>
+                {project.status.replace(/_/g, " ")}
+              </Badge>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium">Priority</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Badge variant={getPriorityVariant(project.priority)}>
+                {project.priority}
+              </Badge>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium">Category</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <Tag className="mr-2 h-4 w-4" />
+                {project.category.replace(/_/g, " ")}
               </div>
-              <p className="text-muted-foreground">{project?.description}</p>
-            </div>
-            <Button
-                size="sm"
-                className="flex items-center gap-1"
-                asChild
-            >
-                <Link href={`/projects/${project?.id}/edit`}>
-                <Edit className="h-4 w-4" />
-                Edit Project
-                </Link>
-            </Button>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Project summary cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium">Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center text-sm">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                <span>{formatDate(project.startDate)} - {formatDate(project.dueDate)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Project details tabs */}
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="team">Team</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
             <Card>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-medium">Status</CardTitle>
+              <CardHeader>
+                <CardTitle>Description</CardTitle>
+                <CardDescription>Project overview and details</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge variant={getStatusVariant(project?.status || "NOT_STARTED")}>
-                  {project?.status.replace(/_/g, " ")}
-                </Badge>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-medium">Priority</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Badge variant={getPriorityVariant(project?.priority || "MEDIUM")}>
-                  {project?.priority}
-                </Badge>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-medium">Category</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center">
-                  <Tag className="mr-2 h-4 w-4" />
-                  {project?.category.replace(/_/g, " ")}
+                <p className="text-sm text-muted-foreground">
+                  {project.description || "No description provided."}
+                </p>
+                <div className="mt-4">
+                  <h3 className="font-medium mb-2">Latest Updates</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Last updated on {formatDate(project.updatedAt)}
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm font-medium">Timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-sm">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  <span>{formatDate(project?.startDate)} - {formatDate(project?.dueDate)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Project details tabs */}
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="tasks">Tasks</TabsTrigger>
-              <TabsTrigger value="team">Team</TabsTrigger>
-            </TabsList>
-
-            {/* Overview tab */}
-            <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Project Details</CardTitle>
-                  <CardDescription>
-                    Comprehensive information about this project
-                  </CardDescription>
+                  <CardTitle>Task Summary</CardTitle>
+                  <CardDescription>Overview of project tasks</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <h3 className="font-medium mb-2">Description</h3>
-                    <p className="text-sm text-muted-foreground">{project?.description}</p>
-                  </div>
-                  
-                  <div>
-                    <h3 className="font-medium mb-2">Timeline</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        <div>
-                          <p className="text-sm font-medium">Start Date</p>
-                          <p className="text-sm text-muted-foreground">{formatDate(project?.startDate)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        <div>
-                          <p className="text-sm font-medium">Due Date</p>
-                          <p className="text-sm text-muted-foreground">{formatDate(project?.dueDate)}</p>
-                        </div>
-                      </div>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Total Tasks</span>
+                      <span className="font-medium">{project.tasks?.length || 0}</span>
                     </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="font-medium mb-2">Latest Updates</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Last updated on {formatDate(project?.updatedAt)}
-                    </p>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Completed</span>
+                      <span className="font-medium">
+                        {project.tasks?.filter(t => t.status === "DONE").length || 0}
+                      </span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">In Progress</span>
+                      <span className="font-medium">
+                        {project.tasks?.filter(t => t.status === "IN_PROGRESS").length || 0}
+                      </span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">To Do</span>
+                      <span className="font-medium">
+                        {project.tasks?.filter(t => t.status === "TODO").length || 0}
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
+                <CardFooter>
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link href={`/projects/${project.id}?tab=tasks`} onClick={(e) => {
+                      e.preventDefault();
+                      handleTabChange("tasks");
+                    }}>
+                      <Clipboard className="mr-2 h-4 w-4" />
+                      View All Tasks
+                    </Link>
+                  </Button>
+                </CardFooter>
               </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Task Summary</CardTitle>
-                    <CardDescription>Overview of project tasks</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">Total Tasks</span>
-                        <span className="font-medium">{project?.tasks?.length || 0}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">Completed</span>
-                        <span className="font-medium">
-                          {project?.tasks?.filter(t => t.status === "DONE").length || 0}
-                        </span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">In Progress</span>
-                        <span className="font-medium">
-                          {project?.tasks?.filter(t => t.status === "IN_PROGRESS").length || 0}
-                        </span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">To Do</span>
-                        <span className="font-medium">
-                          {project?.tasks?.filter(t => t.status === "TODO").length || 0}
-                        </span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">Blocked</span>
-                        <span className="font-medium">
-                          {project?.tasks?.filter(t => t.status === "BLOCKED").length || 0}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button variant="outline" className="w-full" asChild>
-                      <Link href={`/projects/${project?.id}?tab=tasks`} onClick={(e) => {
-                        e.preventDefault();
-                        handleTabChange("tasks");
-                      }}>
-                        <Clipboard className="mr-2 h-4 w-4" />
-                        View All Tasks
-                      </Link>
-                    </Button>
-                  </CardFooter>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Team Members</CardTitle>
-                    <CardDescription>People working on this project</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {project?.teamMembers?.map((member) => (
-                        <div key={member.id} className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={member.avatarUrl} />
-                            <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-sm font-medium">{member.name}</p>
-                            <p className="text-xs text-muted-foreground">{member.role}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button variant="outline" className="w-full" asChild>
-                      <Link href={`/projects/${project?.id}?tab=team`} onClick={(e) => {
-                        e.preventDefault();
-                        handleTabChange("team");
-                      }}>
-                        <Users className="mr-2 h-4 w-4" />
-                        View All Team Members
-                      </Link>
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </div>
-            </TabsContent>
-
-            {/* Tasks tab */}
-            <TabsContent value="tasks" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle>Project Tasks</CardTitle>
-                      <CardDescription>All tasks for this project</CardDescription>
-                    </div>
-                    <AddTaskModal projectId={project?.id || ""} />
-                  </div>
+                  <CardTitle>Team Members</CardTitle>
+                  <CardDescription>Project team and collaborators</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {project?.tasks && project.tasks.length > 0 ? (
-                      project.tasks.map((task) => (
-                        <div key={task.id} className="border rounded-md p-4 hover:border-primary transition-colors">
-                          <div className="flex justify-between items-start mb-2">
+                    {project.teamMembers?.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No team members assigned yet.</p>
+                    ) : (
+                      project.teamMembers?.map((member) => {
+                        return (
+                          <div key={member.id} className="flex items-center gap-4">
+                            <Avatar>
+                              <AvatarImage src={member.avatarUrl} />
+                              <AvatarFallback>{member.name[0]}</AvatarFallback>
+                            </Avatar>
                             <div>
-                              <Link 
-                                href={`/projects/${project.id}/tasks/${task.id}`}
-                                className="font-medium hover:text-primary hover:underline transition-colors"
-                              >
-                                {task.title}
-                              </Link>
-                              <p className="text-sm text-muted-foreground">{task.description}</p>
-                            </div>
-                            <Badge variant={getTaskStatusVariant(task.status)}>
-                              {task.status}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center">
-                                <Clock className="mr-1 h-3 w-3" />
-                                <span>Due: {task.dueDate ? formatDate(task.dueDate) : "No due date"}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {project.teamMembers && task.assigneeId && (
-                                <div className="flex items-center">
-                                  <Avatar className="h-6 w-6 mr-1">
-                                    <AvatarImage 
-                                      src={project.teamMembers.find(m => m.id === task.assigneeId)?.avatarUrl} 
-                                    />
-                                    <AvatarFallback className="text-xs">
-                                      {project.teamMembers.find(m => m.id === task.assigneeId)?.name.charAt(0)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span>
-                                    {project.teamMembers.find(m => m.id === task.assigneeId)?.name}
-                                  </span>
-                                </div>
+                              <p className="text-sm font-medium">{member.name}</p>
+                              <p className="text-xs text-muted-foreground">{member.email}</p>
+                              {roles.find(r => r.id === member.roleId) && (
+                                <span className="text-xs text-muted-foreground">
+                                  {roles.find(r => r.id === member.roleId)?.name}
+                                </span>
                               )}
                             </div>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center p-4">
-                        <p className="text-muted-foreground">No tasks found for this project.</p>
-                        <AddTaskModal 
-                          projectId={project?.id || ""} 
-                          trigger={
-                            <Button variant="outline" className="mt-4">
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add First Task
-                            </Button>
-                          }
-                        />
-                      </div>
+                        );
+                      })
                     )}
                   </div>
                 </CardContent>
+                <CardFooter>
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link href={`/projects/${project.id}?tab=team`} onClick={(e) => {
+                      e.preventDefault();
+                      handleTabChange("team");
+                    }}>
+                      <Users className="mr-2 h-4 w-4" />
+                      Manage Team
+                    </Link>
+                  </Button>
+                </CardFooter>
               </Card>
-            </TabsContent>
+            </div>
+          </TabsContent>
 
-            {/* Team tab */}
-            <TabsContent value="team" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle>Team Members</CardTitle>
-                      <CardDescription>People assigned to this project</CardDescription>
-                    </div>
-                    <Button size="sm">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Member
-                    </Button>
+          <TabsContent value="tasks">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Tasks</CardTitle>
+                    <CardDescription>Manage project tasks</CardDescription>
                   </div>
-                </CardHeader>
-                <CardContent>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Task
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {project.tasks?.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No tasks created yet.</p>
+                  </div>
+                ) : (
                   <div className="space-y-4">
-                    {project?.teamMembers && project.teamMembers.length > 0 ? (
-                      project.teamMembers.map((member) => (
-                        <div key={member.id} className="flex items-center justify-between border rounded-md p-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarImage src={member.avatarUrl} />
-                              <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium">{member.name}</p>
-                              <p className="text-sm text-muted-foreground">{member.role}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm">
-                              <Mail className="mr-2 h-4 w-4" />
-                              Contact
-                            </Button>
+                    {project.tasks?.map((task) => (
+                      <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="space-y-1">
+                          <p className="font-medium">{task.title}</p>
+                          <p className="text-sm text-muted-foreground">{task.description}</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Badge variant={getStatusVariant(task.status)}>
+                            {task.status.replace(/_/g, " ")}
+                          </Badge>
+                          {task.dueDate && (
+                            <span className="text-sm text-muted-foreground">
+                              Due {formatDate(task.dueDate)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="team">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Team Members</CardTitle>
+                    <CardDescription>Manage project team</CardDescription>
+                  </div>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Member
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {project.teamMembers?.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No team members assigned yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {project.teamMembers?.map((member) => (
+                      <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-4">
+                          <Avatar>
+                            <AvatarImage src={member.avatarUrl} />
+                            <AvatarFallback>{member.name[0]}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{member.name}</p>
+                            <p className="text-sm text-muted-foreground">{member.email}</p>
+                            {roles.find(r => r.id === member.roleId) && (
+                              <span className="text-xs text-muted-foreground">
+                                {roles.find(r => r.id === member.roleId)?.name}
+                              </span>
+                            )}
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-center p-4">
-                        <p className="text-muted-foreground">No team members assigned to this project.</p>
-                        <Button variant="outline" className="mt-4">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Add Team Member
+                        <Button variant="ghost" size="icon">
+                          <Mail className="h-4 w-4" />
                         </Button>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
+
+      <div className="mt-8 space-x-4">
+        {canManageRoles && (
+          <Button onClick={() => setShowRolesModal(true)}>
+            Manage Roles
+          </Button>
+        )}
+        {canManageTeam && (
+          <Button onClick={() => setShowTeamModal(true)}>
+            Manage Team
+          </Button>
+        )}
+      </div>
+
+      <ManageRolesModal
+        projectId={safeProjectId}
+        open={showRolesModal}
+        onOpenChange={setShowRolesModal}
+      />
+      <ManageTeamModal
+        projectId={safeProjectId}
+        open={showTeamModal}
+        onOpenChange={setShowTeamModal}
+        teamMembers={project.teamMembers || []}
+      />
     </Layout>
   );
 } 

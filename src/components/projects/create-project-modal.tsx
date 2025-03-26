@@ -47,7 +47,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Project } from "@/data/projects";
+import { Project } from "@/services/project-service";
+import { useProjects } from "@/contexts/projects-context";
+import { projectService } from "@/services/project-service";
+import { toast } from "sonner";
 
 const formSchema = z.object({
   code: z.string().min(2, {
@@ -96,6 +99,7 @@ function LabelWithTooltip({ label, tooltip }: { label: string; tooltip: string }
 }
 
 export function CreateProjectModal({ open, onOpenChange, onCreateProject }: CreateProjectModalProps) {
+  const { addProject } = useProjects();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -107,31 +111,47 @@ export function CreateProjectModal({ open, onOpenChange, onCreateProject }: Crea
     },
   });
 
-  function onSubmit(values: FormValues) {
-    // Create a new project object
-    const newProject: Project = {
-      id: uuidv4(),
-      code: values.code,
-      name: values.name,
-      description: values.description || "",
-      startDate: values.startDate || null,
-      dueDate: values.dueDate || null,
-      priority: values.priority || "MEDIUM",
-      category: values.category || "DEVELOPMENT",
-      status: "NOT_STARTED",
-      updatedAt: new Date(),
-    };
-    
-    console.log(newProject);
-    
-    // Call the onCreateProject callback if provided
-    if (onCreateProject) {
-      onCreateProject(newProject);
+  async function onSubmit(values: FormValues) {
+    try {
+      // Check if project code exists
+      const codeExists = await projectService.checkProjectCodeExists(values.code);
+      if (codeExists) {
+        toast.error("Project code already exists");
+        return;
+      }
+
+      // Check if project name exists
+      const nameExists = await projectService.checkProjectNameExists(values.name);
+      if (nameExists) {
+        toast.error("Project name already exists");
+        return;
+      }
+
+      // Create a new project object that matches the Firebase interface
+      const newProject = {
+        code: values.code,
+        name: values.name,
+        description: values.description || "",
+        status: "NOT_STARTED" as const,
+        priority: values.priority || "MEDIUM",
+        category: values.category || "DEVELOPMENT",
+        startDate: values.startDate || null,
+        dueDate: values.dueDate || null,
+        teamMembers: [],
+        tasks: [],
+        roles: [], // Initialize empty roles array
+      };
+      
+      // Add project to Firebase
+      await addProject(newProject);
+      
+      // Close the modal and reset the form
+      onOpenChange(false);
+      form.reset();
+    } catch (error) {
+      toast.error("Failed to create project");
+      console.error("Error creating project:", error);
     }
-    
-    // Close the modal and reset the form
-    onOpenChange(false);
-    form.reset();
   }
 
   return (
@@ -327,6 +347,7 @@ export function CreateProjectModal({ open, onOpenChange, onCreateProject }: Crea
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="category"

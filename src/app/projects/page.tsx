@@ -12,12 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Project, projects as mockProjects } from "@/data/projects";
 import { format } from "date-fns";
 import { Search, Filter, Plus, Edit, Trash2, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CreateProjectModal } from "@/components/projects/create-project-modal";
 import Link from "next/link";
+import { useProjects } from "@/contexts/projects-context";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper function to format dates
 const formatDate = (date: Date | null) => {
@@ -26,39 +27,37 @@ const formatDate = (date: Date | null) => {
 };
 
 // Helper function to get status badge variant
-const getStatusVariant = (status: Project["status"]) => {
+const getStatusVariant = (status: string) => {
   switch (status) {
-    case "NOT_STARTED":
-      return "outline";
-    case "IN_PROGRESS":
-      return "secondary";
     case "COMPLETED":
-      return "default";
-    case "ON_HOLD":
-      return "destructive";
-    default:
+      return "secondary";
+    case "IN_PROGRESS":
       return "outline";
+    case "NOT_STARTED":
+      return "default";
+    default:
+      return "default";
   }
 };
 
 // Helper function to get priority badge variant
-const getPriorityVariant = (priority: Project["priority"]) => {
+const getPriorityVariant = (priority: string) => {
   switch (priority) {
-    case "LOW":
-      return "outline";
-    case "MEDIUM":
-      return "secondary";
     case "HIGH":
       return "destructive";
-    default:
+    case "MEDIUM":
       return "outline";
+    case "LOW":
+      return "secondary";
+    default:
+      return "default";
   }
 };
 
 export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [filteredProjects, setFilteredProjects] = useState<Project[]>(mockProjects);
+  const { projects, loading, refreshProjects } = useProjects();
+  const [filteredProjects, setFilteredProjects] = useState(projects);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Filter projects when search query changes
@@ -72,17 +71,16 @@ export default function ProjectsPage() {
     const filtered = projects.filter(
       (project) =>
         project.name.toLowerCase().includes(query) ||
-        project.code.toLowerCase().includes(query) ||
         project.description.toLowerCase().includes(query)
     );
     
     setFilteredProjects(filtered);
   }, [searchQuery, projects]);
 
-  // Handle new project creation
-  const handleCreateProject = (project: Project) => {
-    setProjects((prev) => [project, ...prev]);
-  };
+  // Refresh projects when component mounts
+  useEffect(() => {
+    refreshProjects();
+  }, []);
 
   return (
     <Layout>
@@ -118,7 +116,7 @@ export default function ProjectsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[100px]">Code</TableHead>
+                <TableHead>Code</TableHead>
                 <TableHead>Project Name</TableHead>
                 <TableHead className="hidden md:table-cell">Status</TableHead>
                 <TableHead className="hidden md:table-cell">Priority</TableHead>
@@ -129,16 +127,57 @@ export default function ProjectsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProjects.length === 0 ? (
+              {loading ? (
+                // Loading skeleton
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-[200px]" />
+                        <Skeleton className="h-4 w-[300px]" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Skeleton className="h-6 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Skeleton className="h-6 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8" />
+                        <Skeleton className="h-8 w-8" />
+                        <Skeleton className="h-8 w-8" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : filteredProjects.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
+                  <TableCell colSpan={7} className="h-24 text-center">
                     No projects found.
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredProjects.map((project) => (
                   <TableRow key={project.id}>
-                    <TableCell className="font-medium">{project.code}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-muted-foreground">
+                        {project.code}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="font-medium">
                         <Link 
@@ -150,7 +189,7 @@ export default function ProjectsPage() {
                       </div>
                       <div className="text-sm text-muted-foreground md:hidden">
                         <Badge variant={getStatusVariant(project.status)}>
-                          {project.status.replace(/_/g, " ")}
+                          {project.status}
                         </Badge>
                         {" "}
                         <Badge variant={getPriorityVariant(project.priority)}>
@@ -160,7 +199,7 @@ export default function ProjectsPage() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <Badge variant={getStatusVariant(project.status)}>
-                        {project.status.replace(/_/g, " ")}
+                        {project.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -169,7 +208,7 @@ export default function ProjectsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      {project.category.replace(/_/g, " ")}
+                      {project.category}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {formatDate(project.startDate)}
@@ -207,7 +246,6 @@ export default function ProjectsPage() {
       <CreateProjectModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
-        onCreateProject={handleCreateProject}
       />
     </Layout>
   );
