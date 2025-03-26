@@ -26,12 +26,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { rolesService, ProjectRole } from "@/services/roles-service";
 import { useRoles } from "@/contexts/roles-context";
+import { useProjects } from "@/contexts/projects-context";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { projectService } from "@/services/project-service";
 
 const formSchema = z.object({
   name: z.string().min(1, "Role name is required"),
   description: z.string().min(1, "Description is required"),
   permissions: z.array(z.string()).min(1, "At least one permission is required"),
+  teamMemberId: z.string().min(1, "Team member must be selected"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -44,7 +54,11 @@ interface ManageRolesModalProps {
 
 export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesModalProps) {
   const { projectRoles, refreshProjectRoles } = useRoles();
+  const { projects } = useProjects();
   const [loading, setLoading] = useState(false);
+
+  const project = projects.find(p => p.id === projectId);
+  const roles = projectRoles[projectId] || [];
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -52,16 +66,36 @@ export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesM
       name: "",
       description: "",
       permissions: [],
+      teamMemberId: "",
     },
   });
 
   async function onSubmit(values: FormValues) {
     try {
       setLoading(true);
-      await rolesService.createProjectRole(projectId, values);
+      
+      // Create the role
+      const newRole = await rolesService.createProjectRole(projectId, {
+        name: values.name,
+        description: values.description,
+        permissions: values.permissions,
+      });
+
+      // Assign the role to the team member
+      if (project) {
+        const teamMember = project.teamMembers.find(member => member.id === values.teamMemberId);
+        if (teamMember) {
+          await projectService.addTeamMember(projectId, {
+            ...teamMember,
+            roleId: newRole.id,
+          });
+        }
+      }
+
       await refreshProjectRoles(projectId);
       form.reset();
-      toast.success("Role created successfully");
+      toast.success("Role created and assigned successfully");
+      onOpenChange(false); // Close the modal after successful creation
     } catch (error) {
       console.error("Error creating role:", error);
       toast.error("Failed to create role");
@@ -83,8 +117,6 @@ export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesM
       setLoading(false);
     }
   }
-
-  const roles = projectRoles[projectId] || [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,38 +201,69 @@ export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesM
 
               <FormField
                 control={form.control}
+                name="teamMemberId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Assign to Team Member</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a team member" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {project?.teamMembers.map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {member.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="permissions"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Permissions</FormLabel>
                     <FormControl>
                       <div className="space-y-2">
-                        {["VIEW", "EDIT", "DELETE", "MANAGE_TASKS", "MANAGE_TEAM"].map(
-                          (permission) => (
-                            <div key={permission} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id={permission}
-                                checked={field.value.includes(permission)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    field.onChange([...field.value, permission]);
-                                  } else {
-                                    field.onChange(
-                                      field.value.filter((p) => p !== permission)
-                                    );
-                                  }
-                                }}
-                              />
-                              <label
-                                htmlFor={permission}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                              >
-                                {permission.replace(/_/g, " ")}
-                              </label>
-                            </div>
-                          )
-                        )}
+                        {[
+                          "VIEW",
+                          "EDIT",
+                          "DELETE",
+                          "MANAGE_TASKS",
+                          "MANAGE_TEAM",
+                          "MANAGE_ROLES",
+                          "MANAGE_PROJECT",
+                        ].map((permission) => (
+                          <div key={permission} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={permission}
+                              checked={field.value.includes(permission)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  field.onChange([...field.value, permission]);
+                                } else {
+                                  field.onChange(
+                                    field.value.filter((p) => p !== permission)
+                                  );
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={permission}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {permission.replace(/_/g, " ")}
+                            </label>
+                          </div>
+                        ))}
                       </div>
                     </FormControl>
                     <FormMessage />
@@ -210,8 +273,17 @@ export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesM
 
               <DialogFooter>
                 <Button type="submit" disabled={loading}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Role
+                  {loading ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Role
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </form>

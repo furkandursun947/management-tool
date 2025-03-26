@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { v4 as uuidv4 } from "uuid";
 import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 
 import Layout from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -18,16 +18,11 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { projects } from "@/data/projects";
+import { rolesService } from "@/services/roles-service";
+import { useProjects } from "@/contexts/projects-context";
+import { toast } from "sonner";
 
 // Define available permissions
 const PERMISSIONS = [
@@ -79,54 +74,48 @@ const PERMISSIONS = [
 // Form schema
 const roleFormSchema = z.object({
   name: z.string().min(1, "Role name is required"),
-  members: z.array(z.string()).min(1, "Select at least one member"),
-  permissions: z.array(z.string()).min(1, "Select at least one permission"),
+  description: z.string().min(1, "Description is required"),
+  permissions: z.array(z.string()).optional(),
 });
 
 type RoleFormValues = z.infer<typeof roleFormSchema>;
 
 export default function NewRolePage() {
   const router = useRouter();
-  
-  // Get all team members from all projects
-  const allMembers = projects.reduce((acc, project) => {
-    if (project.teamMembers) {
-      acc.push(...project.teamMembers);
-    }
-    return acc;
-  }, [] as typeof projects[0]["teamMembers"]);
-  
-  // Remove duplicates based on id
-  const uniqueMembers = Array.from(
-    new Map(allMembers.map(member => [member.id, member])).values()
-  );
+  const { projects } = useProjects();
+  const [loading, setLoading] = useState(false);
   
   // Initialize form
   const form = useForm<RoleFormValues>({
     resolver: zodResolver(roleFormSchema),
     defaultValues: {
       name: "",
-      members: [],
+      description: "",
       permissions: [],
     },
   });
 
   // Handle form submission
-  function onSubmit(values: RoleFormValues) {
-    // Create a new role
-    const newRole = {
-      id: uuidv4(),
-      name: values.name,
-      members: values.members,
-      permissions: values.permissions,
-      createdAt: new Date(),
-    };
+  async function onSubmit(values: RoleFormValues) {
+    console.log("Form submitted with values:", values);
+    try {
+      setLoading(true);
+      
+      // Create the role
+      await rolesService.createSystemRole({
+        name: values.name,
+        description: values.description,
+        permissions: values.permissions || [],
+      });
 
-    // In a real app, you would send this to an API
-    console.log("New role:", newRole);
-
-    // Redirect back to roles page
-    router.push("/roles");
+      toast.success("Role created successfully");
+      router.push("/roles");
+    } catch (error) {
+      console.error("Error creating role:", error);
+      toast.error("Failed to create role");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -146,7 +135,7 @@ export default function NewRolePage() {
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Create New Role</h1>
               <p className="text-muted-foreground">
-                Define a new role and assign permissions to team members
+                Define a new role and assign permissions
               </p>
             </div>
           </div>
@@ -172,62 +161,29 @@ export default function NewRolePage() {
 
                   <FormField
                     control={form.control}
-                    name="members"
-                    render={() => (
+                    name="description"
+                    render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Team Members</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            const currentMembers = form.getValues("members");
-                            if (!currentMembers.includes(value)) {
-                              form.setValue("members", [...currentMembers, value]);
-                            }
-                          }}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select members" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {uniqueMembers.map((member) => (
-                              <SelectItem key={member.id} value={member.id}>
-                                {member.name} ({member.role})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="mt-2 space-y-2">
-                          {form.watch("members").map((memberId) => {
-                            const member = uniqueMembers.find(m => m.id === memberId);
-                            return (
-                              <div key={memberId} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                                <span>{member?.name}</span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    const currentMembers = form.getValues("members");
-                                    form.setValue(
-                                      "members",
-                                      currentMembers.filter(id => id !== memberId)
-                                    );
-                                  }}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Describe the role's responsibilities" {...field} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
                   <div className="flex justify-end">
-                    <Button type="submit">Create Role</Button>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? (
+                        <>
+                          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground" />
+                          Creating...
+                        </>
+                      ) : (
+                        "Create Role"
+                      )}
+                    </Button>
                   </div>
                 </form>
               </Form>
@@ -245,23 +201,16 @@ export default function NewRolePage() {
                           <div className="flex items-center space-x-2">
                             <Checkbox
                               id={permission.id}
-                              checked={form.watch("permissions").includes(permission.id)}
+                              checked={form.watch("permissions")?.includes(permission.id) ?? false}
                               onCheckedChange={(checked) => {
-                                const currentPermissions = form.getValues("permissions");
+                                const currentPermissions = form.getValues("permissions") ?? [];
                                 if (checked) {
-                                  // Add all sub-permissions when parent is checked
-                                  const newPermissions = [
-                                    ...currentPermissions,
-                                    permission.id,
-                                    ...permission.subPermissions.map(p => p.id)
-                                  ];
-                                  form.setValue("permissions", newPermissions);
+                                  form.setValue("permissions", [...currentPermissions, permission.id]);
                                 } else {
-                                  // Remove all sub-permissions when parent is unchecked
-                                  const newPermissions = currentPermissions.filter(
-                                    p => p !== permission.id && !permission.subPermissions.map(sp => sp.id).includes(p)
+                                  form.setValue(
+                                    "permissions",
+                                    currentPermissions.filter((p) => p !== permission.id)
                                   );
-                                  form.setValue("permissions", newPermissions);
                                 }
                               }}
                             />
@@ -275,27 +224,27 @@ export default function NewRolePage() {
                           <p className="text-sm text-muted-foreground ml-6">
                             {permission.description}
                           </p>
-                          <div className="ml-6 space-y-2">
+                          <div className="ml-6 space-y-1">
                             {permission.subPermissions.map((subPermission) => (
                               <div key={subPermission.id} className="flex items-center space-x-2">
                                 <Checkbox
                                   id={subPermission.id}
-                                  checked={form.watch("permissions").includes(subPermission.id)}
+                                  checked={form.watch("permissions")?.includes(subPermission.id) ?? false}
                                   onCheckedChange={(checked) => {
-                                    const currentPermissions = form.getValues("permissions");
+                                    const currentPermissions = form.getValues("permissions") ?? [];
                                     if (checked) {
                                       form.setValue("permissions", [...currentPermissions, subPermission.id]);
                                     } else {
                                       form.setValue(
                                         "permissions",
-                                        currentPermissions.filter(p => p !== subPermission.id)
+                                        currentPermissions.filter((p) => p !== subPermission.id)
                                       );
                                     }
                                   }}
                                 />
                                 <label
                                   htmlFor={subPermission.id}
-                                  className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
                                   {subPermission.label}
                                 </label>
