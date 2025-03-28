@@ -12,6 +12,7 @@ import Layout from "@/components/layout";
 import { CreateProjectModal } from "@/components/projects/create-project-modal";
 import { useAuth } from "@/contexts/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TeamInvitations } from "@/components/dashboard/team-invitations";
 
 export default function HomePage() {
   const { projects, loading, refreshProjects } = useProjects();
@@ -53,6 +54,9 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* Team Invitations Section */}
+        <TeamInvitations />
+
         {/* Project Statistics */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="p-6">
@@ -72,8 +76,6 @@ export default function HomePage() {
             </p>
           </Card>
         </div>
-
-        
 
         {/* Projects Section */}
         <section className="space-y-4">
@@ -224,13 +226,12 @@ export default function HomePage() {
             ))}
           </Card>
         </section>
-
-        {/* Create Project Modal */}
-        <CreateProjectModal 
-          open={createModalOpen} 
-          onOpenChange={setCreateModalOpen} 
-        />
       </div>
+      
+      <CreateProjectModal 
+        open={createModalOpen} 
+        onOpenChange={setCreateModalOpen} 
+      />
     </Layout>
   );
 }

@@ -16,6 +16,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  userCode: string;
   systemRoleIds: string[];
   projects?: Array<{
     id: string;
@@ -45,6 +46,7 @@ class UserService {
       id: docSnap.id,
       name: data.name,
       email: data.email,
+      userCode: data.userCode || "",
       systemRoleIds: data.systemRoleIds || [],
       projects: data.projects || [],
       createdAt: data.createdAt?.toDate(),
@@ -60,6 +62,7 @@ class UserService {
         id: doc.id,
         name: data.name,
         email: data.email,
+        userCode: data.userCode || "",
         systemRoleIds: data.systemRoleIds || [],
         projects: data.projects || [],
         createdAt: data.createdAt?.toDate(),
@@ -107,6 +110,29 @@ class UserService {
       id: doc.id,
       name: data.name,
       email: data.email,
+      userCode: data.userCode || "",
+      systemRoleIds: data.systemRoleIds || [],
+      projects: data.projects || [],
+      createdAt: data.createdAt?.toDate(),
+      updatedAt: data.updatedAt?.toDate(),
+    };
+  }
+
+  async getUserByCode(userCode: string): Promise<User | null> {
+    const q = query(this.collection, where("userCode", "==", userCode));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      return null;
+    }
+
+    const doc = querySnapshot.docs[0];
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: data.name,
+      email: data.email,
+      userCode: data.userCode,
       systemRoleIds: data.systemRoleIds || [],
       projects: data.projects || [],
       createdAt: data.createdAt?.toDate(),

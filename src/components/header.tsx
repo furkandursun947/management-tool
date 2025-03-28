@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "./theme/theme-toggle";
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { MobileSidebar } from "./mobile-sidebar";
+import { UserNav } from "./layout/user-nav";
 
 export default function Header() {
   return (
@@ -39,10 +40,7 @@ export default function Header() {
             <Bell className="h-5 w-5" />
             <span className="sr-only">Notifications</span>
           </Button>
-          <Button className="cursor-pointer" variant="ghost" size="icon">
-            <User className="h-5 w-5" />
-            <span className="sr-only">User</span>
-          </Button>
+          <UserNav />
           <ThemeToggle />
         </div>
       </div>

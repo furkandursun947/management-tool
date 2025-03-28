@@ -6,7 +6,7 @@ import Layout from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, MoreVertical, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Mail, MoreVertical, Edit, Trash2, UserCheck, UserX } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,17 +43,19 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { v4 as uuidv4 } from "uuid";
 import { teamService, TeamMember } from "@/services/team-service";
+import { userService } from "@/services/user-service";
+import { invitationService, TeamInvitation } from "@/services/invitation-service";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 
-// Form schema for adding new member
-const memberFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
+// Form schema for inviting a new member
+const inviteMemberFormSchema = z.object({
+  userCode: z.string().min(1, "User code is required"),
   role: z.string().min(1, "Role is required"),
-  avatarUrl: z.string().optional(),
 });
 
-type MemberFormValues = z.infer<typeof memberFormSchema>;
+type InviteMemberFormValues = z.infer<typeof inviteMemberFormSchema>;
 
 export default function TeamPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,17 +63,23 @@ export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [foundUser, setFoundUser] = useState<any | null>(null);
+  const [searchingUser, setSearchingUser] = useState(false);
+  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
 
-  // Fetch team members and roles
+  // Fetch team members, roles, and invitations
   useEffect(() => {
     async function fetchData() {
       try {
-        const [membersData, rolesData] = await Promise.all([
+        const [membersData, rolesData, invitationsData] = await Promise.all([
           teamService.getTeamMembers(),
-          teamService.getUniqueRoles()
+          teamService.getUniqueRoles(),
+          // Add logic to get current user's invitations if needed
+          invitationService.getInvitationsSentByUser("currentUserId") // Replace with actual user ID
         ]);
         setMembers(membersData || []);
         setRoles(rolesData || []);
+        setInvitations(invitationsData || []);
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error("Failed to load team members");
@@ -91,35 +99,61 @@ export default function TeamPage() {
   );
 
   // Initialize form
-  const form = useForm<MemberFormValues>({
-    resolver: zodResolver(memberFormSchema),
+  const form = useForm<InviteMemberFormValues>({
+    resolver: zodResolver(inviteMemberFormSchema),
     defaultValues: {
-      name: "",
-      email: "",
+      userCode: "",
       role: "",
-      avatarUrl: "",
     },
   });
 
-  // Handle form submission
-  async function onSubmit(values: MemberFormValues) {
+  // Look up user by code
+  async function handleUserCodeSearch(userCode: string) {
+    if (!userCode) return;
+    
+    setSearchingUser(true);
     try {
-      const newMember = await teamService.addTeamMember(values);
-      setMembers(prev => [...prev, newMember]);
-      setRoles(prev => {
-        if (!prev.includes(values.role)) {
-          return [...prev, values.role].sort();
-        }
-        return prev;
+      const user = await userService.getUserByCode(userCode);
+      setFoundUser(user);
+      if (!user) {
+        toast.error("User not found with that code");
+      }
+    } catch (error) {
+      console.error('Error searching for user:', error);
+      toast.error("Failed to search for user");
+      setFoundUser(null);
+    } finally {
+      setSearchingUser(false);
+    }
+  }
+
+  // Handle form submission
+  async function onSubmit(values: InviteMemberFormValues) {
+    try {
+      if (!foundUser) {
+        toast.error("Please find a valid user first");
+        return;
+      }
+
+      // Create invitation
+      const invitation = await invitationService.createInvitation({
+        inviterId: "currentUserId", // Replace with actual user ID
+        inviterName: "Current User Name", // Replace with actual user name
+        inviteeId: foundUser.id,
+        inviteeName: foundUser.name,
+        role: values.role,
       });
+
+      setInvitations(prev => [...prev, invitation]);
       
-      toast.success("Team member added successfully");
+      toast.success(`Invitation sent to ${foundUser.name}`);
       
       setIsAddMemberOpen(false);
       form.reset();
+      setFoundUser(null);
     } catch (error) {
-      console.error('Error adding team member:', error);
-      toast.error("Failed to add team member");
+      console.error('Error sending invitation:', error);
+      toast.error("Failed to send invitation");
     }
   }
 
@@ -132,6 +166,18 @@ export default function TeamPage() {
     } catch (error) {
       console.error('Error deleting team member:', error);
       toast.error("Failed to remove team member");
+    }
+  }
+
+  // Handle invitation cancellation
+  async function handleCancelInvitation(id: string) {
+    try {
+      await invitationService.deleteInvitation(id);
+      setInvitations(prev => prev.filter(invitation => invitation.id !== id));
+      toast.success("Invitation cancelled");
+    } catch (error) {
+      console.error('Error cancelling invitation:', error);
+      toast.error("Failed to cancel invitation");
     }
   }
 
@@ -162,83 +208,105 @@ export default function TeamPage() {
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
-                  Add Member
+                  Invite Member
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Add Team Member</DialogTitle>
+                  <DialogTitle>Invite Team Member</DialogTitle>
                   <DialogDescription>
-                    Add a new member to your team. Fill out the form below.
+                    Invite a new member to your team using their user code.
                   </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="name"
+                      name="userCode"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Member's name" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input placeholder="member@example.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="role"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Role</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormLabel className="flex items-center gap-1">
+                            User Code
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-80">
+                                <p>User codes can be found in the profile settings of each user. Ask the user to share their unique code with you to invite them.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </FormLabel>
+                          <div className="flex space-x-2">
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a role" />
-                              </SelectTrigger>
+                              <Input 
+                                placeholder="Enter user code" 
+                                {...field} 
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  setFoundUser(null);
+                                }}
+                              />
                             </FormControl>
-                            <SelectContent>
-                              {roles.map((role) => (
-                                <SelectItem key={role} value={role}>
-                                  {role}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={() => handleUserCodeSearch(field.value)}
+                              disabled={searchingUser || !field.value}
+                            >
+                              {searchingUser ? "Searching..." : "Search"}
+                            </Button>
+                          </div>
                           <FormMessage />
+                          {foundUser && (
+                            <div className="mt-2 p-2 border rounded-md">
+                              <div className="flex items-center space-x-2">
+                                <Avatar>
+                                  <AvatarImage src={foundUser.avatarUrl} />
+                                  <AvatarFallback>{foundUser.name.charAt(0)}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{foundUser.name}</p>
+                                  <p className="text-sm text-muted-foreground">{foundUser.email}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="avatarUrl"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Avatar URL (Optional)</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://example.com/avatar.jpg" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {foundUser && (
+                      <FormField
+                        control={form.control}
+                        name="role"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Role</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a role" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {roles.map((role) => (
+                                  <SelectItem key={role} value={role}>
+                                    {role}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
                     <DialogFooter>
-                      <Button type="submit">Add Member</Button>
+                      <Button 
+                        type="submit" 
+                        disabled={!foundUser || searchingUser || !form.getValues().role}
+                      >
+                        Send Invitation
+                      </Button>
                     </DialogFooter>
                   </form>
                 </Form>
@@ -248,18 +316,13 @@ export default function TeamPage() {
 
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Team Members</CardTitle>
-                  <CardDescription>
-                    View and manage your team members
-                  </CardDescription>
-                </div>
-                <div className="relative">
+              <div className="flex justify-between items-center">
+                <CardTitle>Team Members</CardTitle>
+                <div className="relative w-64">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search members..."
-                    className="pl-8 w-[300px]"
+                    className="pl-8"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -267,50 +330,106 @@ export default function TeamPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredMembers.map((member) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between p-4 rounded-lg border"
-                  >
-                    <div className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarImage src={member.avatarUrl} />
-                        <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">{member.role}</p>
-                        <p className="text-sm text-muted-foreground">{member.email}</p>
+              {filteredMembers.length > 0 ? (
+                <div className="space-y-4">
+                  {filteredMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <Avatar>
+                          <AvatarImage src={member.avatarUrl} />
+                          <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{member.name}</p>
+                          <p className="text-sm text-muted-foreground">{member.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <span className="px-2 py-1 text-xs rounded-full bg-primary/10 text-primary">
+                          {member.role}
+                        </span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                              <span className="sr-only">Actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Role
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDeleteMember(member.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Mail className="mr-2 h-4 w-4" />
-                          Contact
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          className="text-destructive"
-                          onClick={() => handleDeleteMember(member.id)}
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-muted-foreground">No team members found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Invitations Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Invitations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {invitations.length > 0 ? (
+                <div className="space-y-4">
+                  {invitations.filter(inv => inv.status === 'pending').map((invitation) => (
+                    <div
+                      key={invitation.id}
+                      className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <Avatar>
+                          <AvatarFallback>{invitation.inviteeName.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{invitation.inviteeName}</p>
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            <Mail className="mr-1 h-3 w-3" />
+                            <span>Invitation sent</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-500">
+                          {invitation.role} (Pending)
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCancelInvitation(invitation.id)}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remove
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                ))}
-              </div>
+                          <UserX className="mr-2 h-4 w-4" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-muted-foreground">No pending invitations</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
