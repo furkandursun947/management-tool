@@ -17,6 +17,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  userCode?: string;
   systemRoleIds: string[];
   projects?: Project[];
 }

@@ -14,7 +14,6 @@ import {
   ChevronRight,
   FolderOpen,
   Plus,
-  Shield,
 } from "lucide-react";
 import {
   Collapsible,
@@ -226,11 +225,6 @@ export default function Sidebar() {
             href="/team"
             icon={<Users className="h-4 w-4" />}
             title="Team"
-          />
-          <SidebarItem
-            href="/roles"
-            icon={<Shield className="h-4 w-4" />}
-            title="Roles"
           />
           <SidebarItem
             href="/settings"

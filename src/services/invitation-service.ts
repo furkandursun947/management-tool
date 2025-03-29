@@ -16,9 +16,12 @@ export interface TeamInvitation {
   id: string;
   inviterId: string;
   inviterName: string;
+  inviterEmail?: string; // Davet eden kullanıcının e-posta adresi
   inviteeId: string;
   inviteeName: string;
   role: string;
+  teamId?: string; // Takım ID'si (opsiyonel, geriye dönük uyumluluk için)
+  teamName?: string; // Takım adı (opsiyonel, geriye dönük uyumluluk için)
   status: 'pending' | 'accepted' | 'rejected';
   createdAt: Date;
   updatedAt: Date;
@@ -46,9 +49,12 @@ class InvitationService {
       id: docSnap.id,
       inviterId: data.inviterId,
       inviterName: data.inviterName,
+      inviterEmail: data.inviterEmail,
       inviteeId: data.inviteeId,
       inviteeName: data.inviteeName,
       role: data.role,
+      teamId: data.teamId,
+      teamName: data.teamName,
       status: data.status,
       createdAt: data.createdAt?.toDate(),
       updatedAt: data.updatedAt?.toDate(),
@@ -97,9 +103,12 @@ class InvitationService {
         id: doc.id,
         inviterId: data.inviterId,
         inviterName: data.inviterName,
+        inviterEmail: data.inviterEmail,
         inviteeId: data.inviteeId,
         inviteeName: data.inviteeName,
         role: data.role,
+        teamId: data.teamId,
+        teamName: data.teamName,
         status: data.status,
         createdAt: data.createdAt?.toDate(),
         updatedAt: data.updatedAt?.toDate(),
@@ -117,9 +126,12 @@ class InvitationService {
         id: doc.id,
         inviterId: data.inviterId,
         inviterName: data.inviterName,
+        inviterEmail: data.inviterEmail,
         inviteeId: data.inviteeId,
         inviteeName: data.inviteeName,
         role: data.role,
+        teamId: data.teamId,
+        teamName: data.teamName,
         status: data.status,
         createdAt: data.createdAt?.toDate(),
         updatedAt: data.updatedAt?.toDate(),
@@ -153,9 +165,12 @@ class InvitationService {
           id: doc.id,
           inviterId: data.inviterId,
           inviterName: data.inviterName,
+          inviterEmail: data.inviterEmail,
           inviteeId: data.inviteeId,
           inviteeName: data.inviteeName,
           role: data.role,
+          teamId: data.teamId,
+          teamName: data.teamName,
           status: data.status,
           createdAt: data.createdAt?.toDate(),
           updatedAt: data.updatedAt?.toDate(),

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, CalendarDays, Clock, CheckCircle2, Circle, AlertCircle } from "lucide-react";
+import { Plus, CalendarDays, Clock, CheckCircle2, Circle, AlertCircle, Users, Crown, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useProjects } from "@/contexts/projects-context";
 import { ProjectsSkeleton } from "@/components/dashboard/projects-skeleton";
@@ -13,10 +13,12 @@ import { CreateProjectModal } from "@/components/projects/create-project-modal";
 import { useAuth } from "@/contexts/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamInvitations } from "@/components/dashboard/team-invitations";
+import { useTeams } from "@/contexts/teams-context";
 
 export default function HomePage() {
   const { projects, loading, refreshProjects } = useProjects();
   const { user } = useAuth();
+  const { teams, loading: teamsLoading } = useTeams();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -33,6 +35,9 @@ export default function HomePage() {
         projectName: project.name
       }))
   ).slice(0, 3);
+
+  // Kendi oluşturduğu takımları hesapla
+  const ownedTeams = teams.filter(team => team.ownerId === user?.id);
 
   return (
     <Layout>
@@ -56,6 +61,50 @@ export default function HomePage() {
 
         {/* Team Invitations Section */}
         <TeamInvitations />
+
+        {/* Teams Statistics Section */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Your Teams</h2>
+            <Link href="/team">
+              <Button variant="outline">View All</Button>
+            </Link>
+          </div>
+          
+          {teamsLoading ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <Card className="p-6 flex flex-col items-center justify-center">
+                <div className="rounded-full bg-primary/10 p-3 mb-2">
+                  <Users className="h-6 w-6 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold mb-1">Total Teams</h2>
+                <p className="text-3xl font-bold">{teams.length}</p>
+              </Card>
+              
+              <Card className="p-6 flex flex-col items-center justify-center">
+                <div className="rounded-full bg-primary/10 p-3 mb-2">
+                  <Crown className="h-6 w-6 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold mb-1">Owned Teams</h2>
+                <p className="text-3xl font-bold">{ownedTeams.length}</p>
+              </Card>
+              
+              <Card className="p-6 flex flex-col items-center justify-center">
+                <div className="rounded-full bg-primary/10 p-3 mb-2">
+                  <UserPlus className="h-6 w-6 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold mb-1">Member Teams</h2>
+                <p className="text-3xl font-bold">{teams.length - ownedTeams.length}</p>
+              </Card>
+            </div>
+          )}
+        </section>
 
         {/* Project Statistics */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

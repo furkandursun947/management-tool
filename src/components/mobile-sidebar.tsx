@@ -289,12 +289,6 @@ export function MobileSidebar() {
                       onClose={() => setOpen(false)}
                     />
                     <MobileSidebarItem
-                      href="/roles"
-                      icon={<Shield className="h-4 w-4" />}
-                      title="Roles"
-                      onClose={() => setOpen(false)}
-                    />
-                    <MobileSidebarItem
                       href="/settings"
                       icon={<Settings className="h-4 w-4" />}
                       title="Settings"
