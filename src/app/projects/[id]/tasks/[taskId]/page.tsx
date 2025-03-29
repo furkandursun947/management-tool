@@ -25,7 +25,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Project, Task, TeamMember, projects } from "@/data/projects";
+import { useProjects } from "@/contexts/projects-context";
+import { useAuth } from "@/contexts/firebase-context";
 import { 
   Select, 
   SelectContent, 
@@ -49,6 +50,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Project, TeamMember } from "@/services/project-service";
 
 // Helper function to format dates
 const formatDate = (date: Date | null | undefined) => {
@@ -91,8 +93,11 @@ const getTaskStatusIcon = (status: string) => {
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const [project, setProject] = useState<Project | null>(null);
-  const [task, setTask] = useState<Task | null>(null);
+  const { projects, updateTask, deleteTask } = useProjects();
+  const { user } = useAuth();
+  
+  const [project, setProject] = useState<any | null>(null);
+  const [task, setTask] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -106,32 +111,38 @@ export default function TaskDetailPage() {
   const [editingDueDate, setEditingDueDate] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   
-  // Load data
+  // Load data from Firebase
   useEffect(() => {
-    // In a real app, you would fetch the task from an API
+    if (!projects || projects.length === 0) {
+      setLoading(true);
+      return;
+    }
+    
     const projectId = typeof params.id === 'string' ? params.id : params.id?.[0];
     const taskId = typeof params.taskId === 'string' ? params.taskId : params.taskId?.[0];
     
+    // Find project from projects context
     const foundProject = projects.find(p => p.id === projectId);
     
     if (foundProject) {
       setProject(foundProject);
       
+      // Find task in the project
       const foundTask = foundProject.tasks?.find(t => t.id === taskId);
       
       if (foundTask) {
         setTask(foundTask);
         setEditableTitle(foundTask.title);
-        setEditableDescription(foundTask.description);
-        setSelectedDate(foundTask.dueDate);
+        setEditableDescription(foundTask.description || '');
+        setSelectedDate(foundTask.dueDate ? new Date(foundTask.dueDate) : undefined);
       }
     }
     
     setLoading(false);
-  }, [params.id, params.taskId]);
+  }, [params.id, params.taskId, projects]);
 
-  // Update task in the projects array
-  const updateTask = (updatedFields: Partial<Task>) => {
+  // Handle local task updates
+  const handleLocalTaskUpdate = (updatedFields: Partial<any>) => {
     if (!project || !task) return;
     
     setSaving(true);
@@ -142,46 +153,45 @@ export default function TaskDetailPage() {
       ...updatedFields
     };
     
-    // In a real app, you would send this to an API
-    console.log("Updating task:", updatedTask);
+    // Update local state
+    setTask(updatedTask);
     
-    // For the demo, update the task in the project's tasks array
-    const projectIndex = projects.findIndex(p => p.id === project.id);
-    if (projectIndex >= 0 && project.tasks) {
-      const taskIndex = project.tasks.findIndex(t => t.id === task.id);
-      if (taskIndex >= 0) {
-        project.tasks[taskIndex] = updatedTask;
-        setTask(updatedTask);
-        
-        // Show success toast with Sonner
-        toast.success("Task updated", {
-          description: "Your changes have been saved.",
+    // In Firebase implementation, call updateTask
+    try {
+      updateTask(project.id, task.id, updatedFields)
+        .then(() => {
+          // Do nothing, toast is handled by the context
+        })
+        .catch((error) => {
+          console.error("Failed to update task:", error);
+        })
+        .finally(() => {
+          setTimeout(() => {
+            setSaving(false);
+          }, 500);
         });
-      }
-    }
-    
-    // Simulate API delay
-    setTimeout(() => {
+    } catch (error) {
+      console.error("Failed to update task:", error);
       setSaving(false);
-    }, 500);
+    }
   };
   
   // Handle status change
   const handleStatusChange = (status: string) => {
-    updateTask({ status: status as Task["status"] });
+    handleLocalTaskUpdate({ status });
   };
   
   // Handle assignee change
   const handleAssigneeChange = (assigneeId: string) => {
     // If value is "unassigned", set assigneeId to undefined
-    updateTask({ assigneeId: assigneeId === "unassigned" ? undefined : assigneeId });
+    handleLocalTaskUpdate({ assigneeId: assigneeId === "unassigned" ? undefined : assigneeId });
     setEditingAssignee(false);
   };
   
   // Handle title change
   const handleTitleSave = () => {
     if (editableTitle !== task?.title) {
-      updateTask({ title: editableTitle });
+      handleLocalTaskUpdate({ title: editableTitle });
     }
     setEditingTitle(false);
   };
@@ -189,7 +199,7 @@ export default function TaskDetailPage() {
   // Handle description change
   const handleDescriptionSave = () => {
     if (editableDescription !== task?.description) {
-      updateTask({ description: editableDescription });
+      handleLocalTaskUpdate({ description: editableDescription });
     }
     setEditingDescription(false);
   };
@@ -198,10 +208,10 @@ export default function TaskDetailPage() {
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
-      updateTask({ dueDate: date });
+      handleLocalTaskUpdate({ dueDate: date });
     } else {
       setSelectedDate(undefined);
-      updateTask({ dueDate: undefined });
+      handleLocalTaskUpdate({ dueDate: undefined });
     }
     setEditingDueDate(false);
   };
@@ -212,22 +222,19 @@ export default function TaskDetailPage() {
     
     setSaving(true);
     
-    // In a real app, you would send a delete request to an API
-    console.log("Deleting task:", task.id);
-    
-    // For the demo, remove the task from the project's tasks array
-    const projectIndex = projects.findIndex(p => p.id === project.id);
-    if (projectIndex >= 0 && project.tasks) {
-      const updatedTasks = project.tasks.filter(t => t.id !== task.id);
-      projects[projectIndex].tasks = updatedTasks;
-      
-      // Show success toast with Sonner
-      toast.success("Task deleted", {
-        description: "The task has been permanently deleted.",
-      });
-      
-      // Navigate back to project
-      router.push(`/projects/${project.id}?tab=tasks`);
+    try {
+      deleteTask(project.id, task.id)
+        .then(() => {
+          // Navigate back to project
+          router.push(`/projects/${project.id}?tab=tasks`);
+        })
+        .catch((error) => {
+          console.error("Failed to delete task:", error);
+          setSaving(false);
+        });
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+      setSaving(false);
     }
   };
 
@@ -263,7 +270,7 @@ export default function TaskDetailPage() {
   }
 
   // Find assignee if task has one
-  const assignee = project?.teamMembers?.find(m => m.id === task?.assigneeId);
+  const assignee = project?.teamMembers?.find((m: TeamMember) => m.id === task?.assigneeId);
 
   return (
     <Layout>
@@ -478,8 +485,8 @@ export default function TaskDetailPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {project?.teamMembers?.map((member) => (
-                        <SelectItem key={member.id} value={member.id} className="flex items-center">
+                      {project?.teamMembers?.map((member: TeamMember) => (
+                        <SelectItem key={member.id} value={member.id}>
                           {member.name}
                         </SelectItem>
                       ))}

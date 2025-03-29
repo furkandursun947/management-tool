@@ -6,17 +6,26 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut
+  signOut as firebaseSignOut,
+  updateProfile
 } from 'firebase/auth';
+import { collection, doc, getDoc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
+import { rolesService } from '@/services/roles-service';
+import { userService } from '@/services/user-service';
+
+// Kullanıcı için benzersiz bir kod oluşturur
+const generateUserCode = () => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+};
 
 interface FirebaseContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -45,7 +54,41 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // Firebase Authentication ile giriş yap
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+      
+      try {
+        // Kullanıcı verisini kontrol et
+        await userService.getUser(firebaseUser.uid);
+      } catch (error) {
+        // Eğer kullanıcı Firestore'da bulunamazsa, yeni kullanıcı dokümanı oluştur
+        if (error instanceof Error && error.message === "User not found") {
+          console.log("Creating new user document after signin for:", firebaseUser.uid);
+          const userCode = generateUserCode();
+          
+          await setDoc(doc(db, 'users', firebaseUser.uid), {
+            name: firebaseUser.displayName || "Unknown User",
+            email: firebaseUser.email || "",
+            userCode,
+            systemRoleIds: [],
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          });
+          
+          // Kullanıcıya varsayılan rol ata
+          const defaultRoleId = await rolesService.createDefaultSystemRole(firebaseUser.uid);
+          
+          // Kullanıcı dokümanını güncelle
+          await setDoc(doc(db, 'users', firebaseUser.uid), {
+            systemRoleIds: [defaultRoleId],
+            updatedAt: Timestamp.now(),
+          }, { merge: true });
+        } else {
+          console.error('Error checking user during signin:', error);
+        }
+      }
+      
       router.push('/');
     } catch (error) {
       console.error('Error signing in:', error);
@@ -53,9 +96,37 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (name: string, email: string, password: string) => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      // Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Update the user profile with the display name
+      await updateProfile(user, { displayName: name });
+      
+      // Generate a unique user code
+      const userCode = generateUserCode();
+      
+      // Önce kullanıcı dokümanını oluşturalım
+      await setDoc(doc(db, 'users', user.uid), {
+        name,
+        email,
+        userCode,
+        systemRoleIds: [], // Başlangıçta boş bir dizi
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Şimdi kullanıcı oluşturulduğuna göre, kullanıcıya özel alt koleksiyonlarda varsayılan rolü oluştur
+      const defaultRoleId = await rolesService.createDefaultSystemRole(user.uid);
+      
+      // Kullanıcı dokümanını güncelleyerek varsayılan rolü ekleyelim
+      await setDoc(doc(db, 'users', user.uid), {
+        systemRoleIds: [defaultRoleId], // Varsayılan rol atama
+        updatedAt: Timestamp.now(),
+      }, { merge: true }); // Mevcut dokümanı korumak için merge:true kullanıyoruz
+      
       router.push('/');
     } catch (error) {
       console.error('Error signing up:', error);
@@ -65,7 +136,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      await firebaseSignOut(auth);
       router.push('/login');
     } catch (error) {
       console.error('Error signing out:', error);

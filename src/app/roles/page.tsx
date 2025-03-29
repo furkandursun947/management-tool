@@ -1,14 +1,68 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Layout from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, RefreshCw } from "lucide-react";
 import { useRoles } from "@/contexts/roles-context";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { SystemRole } from "@/services/roles-service";
 
 export default function RolesPage() {
-  const { systemRoles, loading, error } = useRoles();
+  // Başlangıç loading durumu true, ilk yükleme için
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState<Error | null>(null);
+  const [localRoles, setLocalRoles] = useState<SystemRole[]>([]);
+  
+  // Contextden sadece refreshSystemRoles fonksiyonunu alıyoruz
+  const { refreshSystemRoles } = useRoles();
+  const dataFetchedRef = useRef(false);
+
+  // Sadece bir kez çalışacak useEffect
+  useEffect(() => {
+    const fetchRoles = async () => {
+      if (dataFetchedRef.current) return;
+
+      setLocalLoading(true);
+      try {
+        // Rolleri getir
+        const roles = await refreshSystemRoles();
+        setLocalRoles(roles || []);
+        dataFetchedRef.current = true;
+      } catch (error) {
+        console.error('Error fetching roles:', error);
+        setLocalError(error instanceof Error ? error : new Error('Failed to fetch roles'));
+        toast.error('Failed to load roles');
+      } finally {
+        setLocalLoading(false);
+      }
+    };
+
+    fetchRoles();
+
+    // Cleanup
+    return () => {
+      dataFetchedRef.current = false;
+    };
+  }, []); // Boş bağımlılık dizisi, sadece bir kez çalışması için
+
+  // Manuel yenileme fonksiyonu
+  const handleRefresh = async () => {
+    setLocalLoading(true);
+    try {
+      const roles = await refreshSystemRoles();
+      setLocalRoles(roles || []);
+      toast.success('Roles refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing roles:', error);
+      setLocalError(error instanceof Error ? error : new Error('Failed to refresh roles'));
+      toast.error('Failed to refresh roles');
+    } finally {
+      setLocalLoading(false);
+    }
+  };
 
   return (
     <Layout>
@@ -21,12 +75,18 @@ export default function RolesPage() {
                 Manage team roles and permissions
               </p>
             </div>
-            <Button asChild>
-              <Link href="/roles/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Role
-              </Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleRefresh} disabled={localLoading}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </Button>
+              <Button asChild>
+                <Link href="/roles/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Role
+                </Link>
+              </Button>
+            </div>
           </div>
 
           <Card>
@@ -37,19 +97,19 @@ export default function RolesPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {localLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-              ) : error ? (
+              ) : localError ? (
                 <div className="text-destructive">
-                  Error loading roles: {error.message}
+                  Error loading roles: {localError.message}
                 </div>
-              ) : systemRoles.length === 0 ? (
+              ) : localRoles.length === 0 ? (
                 <p className="text-muted-foreground">No roles defined yet.</p>
               ) : (
                 <div className="space-y-4">
-                  {systemRoles.map((role) => (
+                  {localRoles.map((role) => (
                     <div
                       key={role.id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -60,11 +120,13 @@ export default function RolesPage() {
                           {role.description}
                         </p>
                         <div className="flex flex-wrap gap-2 mt-2">
-                          {role.permissions.map((permission) => (
+                          {role.permissions && role.permissions.length > 0 ? role.permissions.map((permission) => (
                             <Badge key={permission} variant="secondary">
                               {permission}
                             </Badge>
-                          ))}
+                          )) : (
+                            <span className="text-xs text-muted-foreground">No permissions</span>
+                          )}
                         </div>
                       </div>
                       <Button variant="ghost" size="sm" asChild>

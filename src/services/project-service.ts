@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProjectRole } from "./roles-service";
+import { userService } from './user-service';
 
 export interface Task {
   id: string;
@@ -40,6 +41,7 @@ export interface Project {
   teamMembers: TeamMember[];
   tasks: Task[];
   roles: ProjectRole[];
+  createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,31 +57,41 @@ export interface TeamMember {
 }
 
 export const projectService = {
-  // Get all projects
-  async getProjects(): Promise<Project[]> {
+  // Get all projects for a user
+  async getProjects(userId?: string): Promise<Project[]> {
     try {
-      const projectsRef = collection(db, 'projects');
-      const q = query(projectsRef, orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
+      if (!userId) {
+        return [];
+      }
       
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate(),
-        startDate: doc.data().startDate?.toDate() || null,
-        dueDate: doc.data().dueDate?.toDate() || null,
-        teamMembers: doc.data().teamMembers?.map((member: any) => ({
-          ...member,
-          joinedAt: member.joinedAt?.toDate()
-        })) || [],
-        tasks: doc.data().tasks?.map((task: any) => ({
-          ...task,
-          createdAt: task.createdAt?.toDate(),
-          updatedAt: task.updatedAt?.toDate(),
-          dueDate: task.dueDate?.toDate(),
-        })) || [],
-      })) as Project[];
+      // Kullanıcının kendi projeleri
+      const userProjectsRef = collection(db, `users/${userId}/projects`);
+      const userProjectsQuery = query(userProjectsRef, orderBy('createdAt', 'desc'));
+      const userProjectsSnapshot = await getDocs(userProjectsQuery);
+      
+      const projects = userProjectsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate(),
+          updatedAt: data.updatedAt?.toDate(),
+          startDate: data.startDate?.toDate() || null,
+          dueDate: data.dueDate?.toDate() || null,
+          teamMembers: data.teamMembers?.map((member: any) => ({
+            ...member,
+            joinedAt: member.joinedAt?.toDate()
+          })) || [],
+          tasks: data.tasks?.map((task: any) => ({
+            ...task,
+            createdAt: task.createdAt?.toDate(),
+            updatedAt: task.updatedAt?.toDate(),
+            dueDate: task.dueDate?.toDate(),
+          })) || [],
+        };
+      });
+      
+      return projects as Project[];
     } catch (error) {
       console.error('Error getting projects:', error);
       throw error;
@@ -87,9 +99,9 @@ export const projectService = {
   },
 
   // Get a single project by ID
-  async getProject(id: string): Promise<Project | null> {
+  async getProject(userId: string, projectId: string): Promise<Project | null> {
     try {
-      const projectRef = doc(db, 'projects', id);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const projectDoc = await getDoc(projectRef);
       
       if (!projectDoc.exists()) {
@@ -122,28 +134,71 @@ export const projectService = {
   },
 
   // Add a new project
-  async addProject(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'teamMembers' | 'tasks' | 'roles'>): Promise<Project> {
+  async addProject(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'teamMembers' | 'tasks' | 'roles' | 'createdBy'>, userId: string, userName: string, userEmail: string): Promise<Project> {
     try {
-      const projectsRef = collection(db, 'projects');
+      const userProjectsRef = collection(db, `users/${userId}/projects`);
       const now = new Date();
       
-      const docRef = await addDoc(projectsRef, {
-        ...project,
-        teamMembers: [],
-        tasks: [],
-        roles: [],
+      // Projenin varsayılan "Owner" rolünü oluştur
+      const ownerRole = {
+        id: crypto.randomUUID(),
+        projectId: "", // Bu değer döküman oluşturulduğunda atanacak
+        name: "Owner",
+        description: "Project owner with full control",
+        permissions: ["manage_project", "manage_members", "manage_tasks"],
         createdAt: now,
-        updatedAt: now,
+        updatedAt: now
+      };
+      
+      // Varsayılan rolü oluştur (hiçbir izne sahip değil)
+      const defaultRole = {
+        id: crypto.randomUUID(),
+        projectId: "", // Bu değer döküman oluşturulduğunda atanacak
+        name: "Default",
+        description: "Default role with no permissions",
+        permissions: [],
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      // Kullanıcıyı takım üyesi olarak ekle
+      const ownerMember = {
+        id: userId,
+        name: userName,
+        email: userEmail,
+        roleId: ownerRole.id,
+        systemRoleIds: [],
+        joinedAt: now
+      };
+      
+      const docRef = await addDoc(userProjectsRef, {
+        ...project,
+        createdBy: userId,
+        teamMembers: [ownerMember],
+        tasks: [],
+        roles: [ownerRole, defaultRole],
+        createdAt: Timestamp.fromDate(now),
+        updatedAt: Timestamp.fromDate(now),
         startDate: project.startDate ? Timestamp.fromDate(project.startDate) : null,
         dueDate: project.dueDate ? Timestamp.fromDate(project.dueDate) : null,
+      });
+      
+      // Projenin ID'sini role atayalım
+      const completeOwnerRole = {...ownerRole, projectId: docRef.id};
+      const completeDefaultRole = {...defaultRole, projectId: docRef.id};
+      
+      // Rol güncelleme (projectId eklemek için)
+      await updateDoc(docRef, {
+        roles: [completeOwnerRole, completeDefaultRole]
       });
 
       return {
         id: docRef.id,
         ...project,
-        teamMembers: [],
+        createdBy: userId,
+        teamMembers: [ownerMember],
         tasks: [],
-        roles: [],
+        roles: [completeOwnerRole, completeDefaultRole],
         createdAt: now,
         updatedAt: now,
       };
@@ -154,9 +209,9 @@ export const projectService = {
   },
 
   // Update a project
-  async updateProject(id: string, project: Partial<Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'teamMembers' | 'tasks' | 'roles'>>): Promise<void> {
+  async updateProject(userId: string, projectId: string, project: Partial<Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'teamMembers' | 'tasks' | 'roles'>>): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', id);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const now = new Date();
       
       await updateDoc(projectRef, {
@@ -172,9 +227,9 @@ export const projectService = {
   },
 
   // Delete a project
-  async deleteProject(id: string): Promise<void> {
+  async deleteProject(userId: string, projectId: string): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', id);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       await deleteDoc(projectRef);
     } catch (error) {
       console.error('Error deleting project:', error);
@@ -183,9 +238,9 @@ export const projectService = {
   },
 
   // Add a task to a project
-  async addTask(projectId: string, task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> {
+  async addTask(userId: string, projectId: string, task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', projectId);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const now = new Date();
       
       await updateDoc(projectRef, {
@@ -203,53 +258,64 @@ export const projectService = {
   },
 
   // Update a task in a project
-  async updateTask(projectId: string, taskId: string, task: Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> {
+  async updateTask(userId: string, projectId: string, taskId: string, taskUpdates: Partial<Omit<Task, 'id' | 'createdAt'>>): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', projectId);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const projectDoc = await getDoc(projectRef);
       
       if (!projectDoc.exists()) {
         throw new Error('Project not found');
       }
-
-      const tasks = projectDoc.data().tasks || [];
-      const updatedTasks = tasks.map((t: Task) => {
-        if (t.id === taskId) {
-          return {
-            ...t,
-            ...task,
-            dueDate: task.dueDate ? Timestamp.fromDate(task.dueDate) : t.dueDate,
-            updatedAt: Timestamp.fromDate(new Date())
-          };
-        }
-        return t;
-      });
-
-      await updateDoc(projectRef, {
-        tasks: updatedTasks
-      });
+      
+      const projectData = projectDoc.data();
+      const tasks = projectData.tasks || [];
+      
+      // Find the task to update
+      const taskIndex = tasks.findIndex((t: Task) => t.id === taskId);
+      
+      if (taskIndex === -1) {
+        throw new Error('Task not found');
+      }
+      
+      // Create updated task with current timestamp
+      const now = new Date();
+      const updatedTask = {
+        ...tasks[taskIndex],
+        ...taskUpdates,
+        updatedAt: Timestamp.fromDate(now)
+      };
+      
+      // Replace the task in the array
+      tasks[taskIndex] = updatedTask;
+      
+      // Update the document with the modified tasks array
+      await updateDoc(projectRef, { tasks });
+      
     } catch (error) {
       console.error('Error updating task:', error);
       throw error;
     }
   },
-
+  
   // Delete a task from a project
-  async deleteTask(projectId: string, taskId: string): Promise<void> {
+  async deleteTask(userId: string, projectId: string, taskId: string): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', projectId);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const projectDoc = await getDoc(projectRef);
       
       if (!projectDoc.exists()) {
         throw new Error('Project not found');
       }
-
-      const tasks = projectDoc.data().tasks || [];
+      
+      const projectData = projectDoc.data();
+      const tasks = projectData.tasks || [];
+      
+      // Filter out the task to delete
       const updatedTasks = tasks.filter((t: Task) => t.id !== taskId);
-
-      await updateDoc(projectRef, {
-        tasks: updatedTasks
-      });
+      
+      // Update the document with the filtered tasks array
+      await updateDoc(projectRef, { tasks: updatedTasks });
+      
     } catch (error) {
       console.error('Error deleting task:', error);
       throw error;
@@ -257,9 +323,9 @@ export const projectService = {
   },
 
   // Check if project code exists
-  async checkProjectCodeExists(code: string): Promise<boolean> {
+  async checkProjectCodeExists(userId: string, code: string): Promise<boolean> {
     try {
-      const projectsRef = collection(db, 'projects');
+      const projectsRef = collection(db, `users/${userId}/projects`);
       const q = query(projectsRef, where('code', '==', code));
       const querySnapshot = await getDocs(q);
       return !querySnapshot.empty;
@@ -270,9 +336,9 @@ export const projectService = {
   },
 
   // Check if project name exists
-  async checkProjectNameExists(name: string): Promise<boolean> {
+  async checkProjectNameExists(userId: string, name: string): Promise<boolean> {
     try {
-      const projectsRef = collection(db, 'projects');
+      const projectsRef = collection(db, `users/${userId}/projects`);
       const q = query(projectsRef, where('name', '==', name));
       const querySnapshot = await getDocs(q);
       return !querySnapshot.empty;
@@ -283,9 +349,9 @@ export const projectService = {
   },
 
   // Add a team member to a project
-  async addTeamMember(projectId: string, member: Omit<TeamMember, 'id' | 'joinedAt'>): Promise<void> {
+  async addTeamMember(userId: string, projectId: string, member: Omit<TeamMember, 'id' | 'joinedAt'>): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', projectId);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const now = new Date();
       
       await updateDoc(projectRef, {
@@ -302,9 +368,9 @@ export const projectService = {
   },
 
   // Remove a team member from a project
-  async removeTeamMember(projectId: string, memberId: string): Promise<void> {
+  async removeTeamMember(userId: string, projectId: string, memberId: string): Promise<void> {
     try {
-      const projectRef = doc(db, 'projects', projectId);
+      const projectRef = doc(db, `users/${userId}/projects`, projectId);
       const projectDoc = await getDoc(projectRef);
       
       if (!projectDoc.exists()) {

@@ -10,6 +10,7 @@ import { useFirebase } from "@/contexts/firebase-context";
 import { toast } from "sonner";
   
 export default function SignUpPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,10 +26,15 @@ export default function SignUpPage() {
       return;
     }
     
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    
     setLoading(true);
   
     try {
-      await signUp(email, password);
+      await signUp(name, email, password);
       toast.success("Account created successfully");
       router.push("/");
     } catch (error) {
@@ -49,6 +55,19 @@ export default function SignUpPage() {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="name" className="text-sm font-medium">
+              Full Name
+            </label>
+            <Input
+              id="name"
+              type="text"
+              placeholder="Enter your full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">
               Email

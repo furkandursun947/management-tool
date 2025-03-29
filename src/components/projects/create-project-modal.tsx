@@ -7,6 +7,7 @@ import * as z from "zod";
 import { CalendarIcon, HelpCircle } from "lucide-react";
 import { format } from "date-fns";
 import { v4 as uuidv4 } from "uuid";
+import { useAuth } from "@/contexts/firebase-context";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +101,7 @@ function LabelWithTooltip({ label, tooltip }: { label: string; tooltip: string }
 
 export function CreateProjectModal({ open, onOpenChange, onCreateProject }: CreateProjectModalProps) {
   const { addProject } = useProjects();
+  const { user } = useAuth();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -113,15 +115,20 @@ export function CreateProjectModal({ open, onOpenChange, onCreateProject }: Crea
 
   async function onSubmit(values: FormValues) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to create a project");
+        return;
+      }
+
       // Check if project code exists
-      const codeExists = await projectService.checkProjectCodeExists(values.code);
+      const codeExists = await projectService.checkProjectCodeExists(user.uid, values.code);
       if (codeExists) {
         toast.error("Project code already exists");
         return;
       }
 
       // Check if project name exists
-      const nameExists = await projectService.checkProjectNameExists(values.name);
+      const nameExists = await projectService.checkProjectNameExists(user.uid, values.name);
       if (nameExists) {
         toast.error("Project name already exists");
         return;
@@ -137,9 +144,6 @@ export function CreateProjectModal({ open, onOpenChange, onCreateProject }: Crea
         category: values.category || "DEVELOPMENT",
         startDate: values.startDate || null,
         dueDate: values.dueDate || null,
-        teamMembers: [],
-        tasks: [],
-        roles: [], // Initialize empty roles array
       };
       
       // Add project to Firebase

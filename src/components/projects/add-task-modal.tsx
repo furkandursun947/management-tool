@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { v4 as uuidv4 } from "uuid";
-import { CalendarIcon, X } from "lucide-react";
+import { CalendarIcon, Plus } from "lucide-react";
 import { format } from "date-fns";
+import { useAuth } from "@/contexts/firebase-context";
+import { useProjects } from "@/contexts/projects-context";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,14 +43,17 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Project, Task, TeamMember, projects } from "@/data/projects";
+import { toast } from "sonner";
 
 // Form schema
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
-  status: z.enum(["TODO", "IN_PROGRESS", "DONE", "BLOCKED"], {
+  status: z.enum(["TODO", "IN_PROGRESS", "DONE"], {
     required_error: "Please select a status",
+  }),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH"], {
+    required_error: "Please select a priority",
   }),
   assigneeId: z.string().optional(),
   dueDate: z.date().optional(),
@@ -66,6 +70,8 @@ interface AddTaskModalProps {
 export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const { user } = useAuth();
+  const { projects, addTask } = useProjects();
   
   // Get project data
   const project = projects.find(p => p.id === projectId);
@@ -77,38 +83,39 @@ export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProp
       title: "",
       description: "",
       status: "TODO",
+      priority: "MEDIUM",
       assigneeId: undefined,
       dueDate: undefined,
     },
   });
 
   // Handle form submission
-  function onSubmit(values: TaskFormValues) {
-    if (!project) return;
+  async function onSubmit(values: TaskFormValues) {
+    try {
+      if (!project || !user) {
+        toast.error("Project not found or you're not logged in");
+        return;
+      }
 
-    // Create a new task
-    const newTask: Task = {
-      id: uuidv4(),
-      title: values.title,
-      description: values.description,
-      status: values.status,
-      assigneeId: values.assigneeId,
-      dueDate: values.dueDate,
-      createdAt: new Date(),
-    };
+      // Create a new task
+      await addTask(projectId, {
+        title: values.title,
+        description: values.description,
+        status: values.status,
+        priority: values.priority,
+        assigneeId: values.assigneeId,
+        dueDate: values.dueDate,
+      });
 
-    // In a real app, you would send this to an API
-    console.log("New task:", newTask);
-
-    // For the demo, add the task to the project's tasks array
-    if (!project.tasks) {
-      project.tasks = [];
+      toast.success("Task added successfully");
+      
+      // Close modal and reset form
+      form.reset();
+      setOpen(false);
+    } catch (error) {
+      console.error("Error adding task:", error);
+      toast.error("Failed to add task");
     }
-    project.tasks.push(newTask);
-
-    // Close modal and refresh page
-    setOpen(false);
-    router.refresh();
   }
 
   return (
@@ -116,6 +123,7 @@ export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProp
       <DialogTrigger asChild>
         {trigger || (
           <Button size="sm" className={className}>
+            <Plus className="mr-2 h-4 w-4" />
             Add Task
           </Button>
         )}
@@ -182,7 +190,6 @@ export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProp
                         <SelectItem value="TODO">To Do</SelectItem>
                         <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
                         <SelectItem value="DONE">Done</SelectItem>
-                        <SelectItem value="BLOCKED">Blocked</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -192,25 +199,23 @@ export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProp
 
               <FormField
                 control={form.control}
-                name="assigneeId"
+                name="priority"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Assignee</FormLabel>
+                    <FormLabel>Priority</FormLabel>
                     <Select 
                       onValueChange={field.onChange} 
                       defaultValue={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Assign to..." />
+                          <SelectValue placeholder="Select priority" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {project?.teamMembers?.map((member: TeamMember) => (
-                          <SelectItem key={member.id} value={member.id}>
-                            {member.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="LOW">Low</SelectItem>
+                        <SelectItem value="MEDIUM">Medium</SelectItem>
+                        <SelectItem value="HIGH">High</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -218,6 +223,34 @@ export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProp
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="assigneeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Assignee</FormLabel>
+                  <Select 
+                    onValueChange={field.onChange} 
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Assign to..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {project?.teamMembers?.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -258,11 +291,7 @@ export function AddTaskModal({ projectId, trigger, className }: AddTaskModalProp
             />
 
             <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit">Create Task</Button>

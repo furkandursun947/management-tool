@@ -23,6 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { rolesService } from "@/services/roles-service";
 import { useProjects } from "@/contexts/projects-context";
 import { toast } from "sonner";
+import { useRoles } from "@/contexts/roles-context";
 
 // Define available permissions
 const PERMISSIONS = [
@@ -83,6 +84,7 @@ type RoleFormValues = z.infer<typeof roleFormSchema>;
 export default function NewRolePage() {
   const router = useRouter();
   const { projects } = useProjects();
+  const { refreshSystemRoles } = useRoles();
   const [loading, setLoading] = useState(false);
   
   // Initialize form
@@ -109,6 +111,16 @@ export default function NewRolePage() {
       });
 
       toast.success("Role created successfully");
+      
+      try {
+        // Rolleri yenile ve sonrasında sayfaya yönlendir
+        await refreshSystemRoles();
+      } catch (error) {
+        console.error("Error refreshing roles:", error);
+        // Hata olursa bile sayfaya yönlendir
+      }
+      
+      // Rol oluşturma başarılı ise sayfaya yönlendir
       router.push("/roles");
     } catch (error) {
       console.error("Error creating role:", error);

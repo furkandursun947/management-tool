@@ -6,7 +6,7 @@ import Layout from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, MoreVertical, Edit, Trash2, UserCheck, UserX } from "lucide-react";
+import { Plus, Search, Mail, MoreVertical, Edit, Trash2, UserCheck, UserX, CheckCircle, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +45,8 @@ import { v4 as uuidv4 } from "uuid";
 import { teamService, TeamMember } from "@/services/team-service";
 import { userService } from "@/services/user-service";
 import { invitationService, TeamInvitation } from "@/services/invitation-service";
+import { rolesService, SystemRole } from "@/services/roles-service";
+import { useAuth } from "@/contexts/firebase-context";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HelpCircle } from "lucide-react";
@@ -65,21 +67,78 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [foundUser, setFoundUser] = useState<any | null>(null);
   const [searchingUser, setSearchingUser] = useState(false);
-  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<TeamInvitation[]>([]);
+  const [previousInvitations, setPreviousInvitations] = useState<TeamInvitation[]>([]);
+  const [systemRoles, setSystemRoles] = useState<SystemRole[]>([]);
+  const { user } = useAuth();
 
   // Fetch team members, roles, and invitations
   useEffect(() => {
     async function fetchData() {
       try {
-        const [membersData, rolesData, invitationsData] = await Promise.all([
-          teamService.getTeamMembers(),
-          teamService.getUniqueRoles(),
-          // Add logic to get current user's invitations if needed
-          invitationService.getInvitationsSentByUser("currentUserId") // Replace with actual user ID
-        ]);
+        if (!user) {
+          setMembers([]);
+          setRoles([]);
+          setPendingInvitations([]);
+          setPreviousInvitations([]);
+          setLoading(false);
+          return;
+        }
+
+        // Önce sistem rollerini al
+        const systemRoles = await rolesService.getSystemRoles(user.uid);
+        
+        // Kullanıcının rollerini kontrol et
+        let roleNames: string[] = [];
+        
+        // Kullanıcı bilgilerini al
+        const userData = await userService.getUser(user.uid);
+        const userRoleIds = userData.systemRoleIds || [];
+        
+        // Kullanıcının Admin rolü var mı kontrol et
+        const hasAdminRole = userRoleIds.some(roleId => {
+          const role = systemRoles.find(r => r.id === roleId);
+          return role && role.name === 'Admin';
+        });
+        
+        if (hasAdminRole) {
+          // Admin kullanıcıları tüm rolleri görebilir
+          roleNames = systemRoles.map(role => role.name);
+        } else {
+          // Admin olmayan kullanıcılar sadece kendi rollerini ve Default rolünü görebilir
+          const userRoles = systemRoles.filter(role => 
+            userRoleIds.includes(role.id) || role.name === 'Default'
+          );
+          roleNames = userRoles.map(role => role.name);
+        }
+        
+        console.log("User-specific roles:", roleNames);
+
+        // Takım üyelerini ve davetleri al
+        const membersData = await teamService.getTeamMembers(user.uid);
+        const allInvitationsData = await invitationService.getInvitationsSentByUser(user.uid);
+        
+        // Davetleri, bekleyen ve tamamlanmış olarak ayır
+        const pendingInvs = allInvitationsData.filter(inv => inv.status === 'pending');
+        const completedInvs = allInvitationsData.filter(inv => inv.status === 'accepted' || inv.status === 'rejected');
+        
+        // Davetleri tarihe göre sırala (en yeniden en eskiye)
+        const sortedPendingInvs = pendingInvs.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        
+        const sortedCompletedInvs = completedInvs.sort((a, b) => 
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+        
+        console.log("Pending invitations:", sortedPendingInvs);
+        console.log("Previous invitations:", sortedCompletedInvs);
+        
         setMembers(membersData || []);
-        setRoles(rolesData || []);
-        setInvitations(invitationsData || []);
+        setRoles(roleNames || []); // Sistem rollerinin isimlerini kullan
+        setSystemRoles(systemRoles); // Tüm sistem rollerini sakla
+        setPendingInvitations(sortedPendingInvs);
+        setPreviousInvitations(sortedCompletedInvs);
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error("Failed to load team members");
@@ -89,7 +148,7 @@ export default function TeamPage() {
     }
 
     fetchData();
-  }, []);
+  }, [user]);
 
   // Filter members based on search query
   const filteredMembers = members.filter(member =>
@@ -109,13 +168,14 @@ export default function TeamPage() {
 
   // Look up user by code
   async function handleUserCodeSearch(userCode: string) {
-    if (!userCode) return;
+    if (!userCode || !user) return;
     
     setSearchingUser(true);
     try {
-      const user = await userService.getUserByCode(userCode);
-      setFoundUser(user);
-      if (!user) {
+      const foundUserData = await userService.getUserByCode(userCode);
+      console.log("Found user data:", foundUserData); // Bulunan kullanıcı hakkında detaylı bilgi
+      setFoundUser(foundUserData);
+      if (!foundUserData) {
         toast.error("User not found with that code");
       }
     } catch (error) {
@@ -135,16 +195,65 @@ export default function TeamPage() {
         return;
       }
 
+      if (!user) {
+        toast.error("You must be logged in to invite members");
+        return;
+      }
+
+      // Seçilen rolü bul
+      const selectedRoleObj = systemRoles.find((role: SystemRole) => role.name === values.role);
+      if (!selectedRoleObj) {
+        toast.error(`Role "${values.role}" not found`);
+        return;
+      }
+
+      console.log("Creating invitation with selected role:", {
+        role: values.role,
+        roleId: selectedRoleObj.id,
+        permissions: selectedRoleObj.permissions,
+        description: selectedRoleObj.description
+      });
+
+      console.log("Creating invitation with:", {
+        inviterId: user.uid,
+        inviterName: user.displayName || "Unknown User",
+        inviteeId: foundUser.id, // Firestore ID'sini kullanıyoruz
+        inviteeName: foundUser.name,
+        role: values.role
+      });
+
       // Create invitation
-      const invitation = await invitationService.createInvitation({
-        inviterId: "currentUserId", // Replace with actual user ID
-        inviterName: "Current User Name", // Replace with actual user name
-        inviteeId: foundUser.id,
+      const invitation = await invitationService.createInvitation(user.uid, {
+        inviterId: user.uid,
+        inviterName: user.displayName || "Unknown User",
+        inviteeId: foundUser.id, // Firestore ID'sini kullanıyoruz
         inviteeName: foundUser.name,
         role: values.role,
       });
 
-      setInvitations(prev => [...prev, invitation]);
+      console.log("Created invitation:", invitation);
+      
+      // Daveti doğrudan ekle, her iki ID'yi de kullan (Firestore ID ve Firebase UID)
+      if (foundUser.uid) {
+        console.log("User also has a Firebase UID:", foundUser.uid);
+        try {
+          // Eğer kullanıcının bir Firebase UID'si varsa, aynı daveti bu UID ile de oluştur
+          // Bu sadece bir workaround, normalde ID eşleştirme daha tutarlı olmalı
+          await invitationService.createInvitation(user.uid, {
+            inviterId: user.uid,
+            inviterName: user.displayName || "Unknown User", 
+            inviteeId: foundUser.uid, // Firebase UID kullan
+            inviteeName: foundUser.name,
+            role: values.role,
+          });
+          console.log("Created additional invitation with Firebase UID");
+        } catch (err) {
+          console.error("Error creating additional invitation:", err);
+        }
+      }
+
+      // Yeni daveti listeye ekle, en yeni davetler önce gösterilecek şekilde
+      setPendingInvitations(prev => [invitation, ...prev]);
       
       toast.success(`Invitation sent to ${foundUser.name}`);
       
@@ -160,7 +269,12 @@ export default function TeamPage() {
   // Handle member deletion
   async function handleDeleteMember(id: string) {
     try {
-      await teamService.deleteTeamMember(id);
+      if (!user) {
+        toast.error("You must be logged in to perform this action");
+        return;
+      }
+      
+      await teamService.deleteTeamMember(user.uid, id);
       setMembers(prev => prev.filter(member => member.id !== id));
       toast.success("Team member removed successfully");
     } catch (error) {
@@ -172,8 +286,13 @@ export default function TeamPage() {
   // Handle invitation cancellation
   async function handleCancelInvitation(id: string) {
     try {
-      await invitationService.deleteInvitation(id);
-      setInvitations(prev => prev.filter(invitation => invitation.id !== id));
+      if (!user) {
+        toast.error("You must be logged in to perform this action");
+        return;
+      }
+      
+      await invitationService.deleteInvitation(user.uid, id);
+      setPendingInvitations(prev => prev.filter(invitation => invitation.id !== id));
       toast.success("Invitation cancelled");
     } catch (error) {
       console.error('Error cancelling invitation:', error);
@@ -200,9 +319,16 @@ export default function TeamPage() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Team</h1>
-              <p className="text-muted-foreground">
-                Manage your team members and their roles
-              </p>
+              <div className="flex flex-col space-y-1">
+                <p className="text-muted-foreground">
+                  Manage your team members and their roles
+                </p>
+                {roles.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">Available Roles:</span> You can assign {roles.length} role(s): {roles.join(', ')}
+                  </p>
+                )}
+              </div>
             </div>
             <Dialog open={isAddMemberOpen} onOpenChange={setIsAddMemberOpen}>
               <DialogTrigger asChild>
@@ -295,6 +421,15 @@ export default function TeamPage() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              {roles.length === 0 ? (
+                                <p>You don't have any roles to assign.</p>
+                              ) : roles.length === 1 ? (
+                                <p>You can assign the Default role.</p>
+                              ) : (
+                                <p>You can assign {roles.length} roles based on your permissions.</p>
+                              )}
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -303,7 +438,13 @@ export default function TeamPage() {
                     <DialogFooter>
                       <Button 
                         type="submit" 
-                        disabled={!foundUser || searchingUser || !form.getValues().role}
+                        disabled={!foundUser || searchingUser || !form.watch("role")}
+                        onClick={() => {
+                          // Debug için log yazdır
+                          console.log("Form values:", form.getValues());
+                          console.log("Found user:", foundUser);
+                          console.log("Role selected:", form.watch("role"));
+                        }}
                       >
                         Send Invitation
                       </Button>
@@ -390,12 +531,12 @@ export default function TeamPage() {
               <CardTitle>Pending Invitations</CardTitle>
             </CardHeader>
             <CardContent>
-              {invitations.length > 0 ? (
+              {pendingInvitations.length > 0 ? (
                 <div className="space-y-4">
-                  {invitations.filter(inv => inv.status === 'pending').map((invitation) => (
+                  {pendingInvitations.map((invitation) => (
                     <div
                       key={invitation.id}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50"
+                      className="flex items-center justify-between p-3 rounded-md border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-900"
                     >
                       <div className="flex items-center space-x-4">
                         <Avatar>
@@ -407,15 +548,21 @@ export default function TeamPage() {
                             <Mail className="mr-1 h-3 w-3" />
                             <span>Invitation sent</span>
                           </div>
+                          {invitation.createdAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(invitation.createdAt).toLocaleDateString()} at {new Date(invitation.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-4">
-                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-500">
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
                           {invitation.role} (Pending)
                         </span>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="text-destructive hover:bg-destructive/10"
                           onClick={() => handleCancelInvitation(invitation.id)}
                         >
                           <UserX className="mr-2 h-4 w-4" />
@@ -428,6 +575,69 @@ export default function TeamPage() {
               ) : (
                 <div className="py-8 text-center">
                   <p className="text-muted-foreground">No pending invitations</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Previous Invitations Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Previous Invitations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {previousInvitations.length > 0 ? (
+                <div className="space-y-4">
+                  {previousInvitations.map((invitation) => (
+                    <div
+                      key={invitation.id}
+                      className={`flex items-center justify-between p-3 rounded-md border ${
+                        invitation.status === 'accepted' 
+                          ? 'border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900' 
+                          : 'border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-4">
+                        <Avatar>
+                          <AvatarFallback>{invitation.inviteeName.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{invitation.inviteeName}</p>
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            {invitation.status === 'accepted' ? (
+                              <CheckCircle className="mr-1 h-3 w-3 text-green-500" />
+                            ) : (
+                              <XCircle className="mr-1 h-3 w-3 text-red-500" />
+                            )}
+                            <span>
+                              {invitation.status === 'accepted' 
+                                ? 'Invitation accepted' 
+                                : 'Invitation rejected'
+                              }
+                            </span>
+                          </div>
+                          {invitation.updatedAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(invitation.updatedAt).toLocaleDateString()} at {new Date(invitation.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          invitation.status === 'accepted'
+                            ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                            : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                        }`}>
+                          {invitation.role}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-muted-foreground">No previous invitations</p>
                 </div>
               )}
             </CardContent>

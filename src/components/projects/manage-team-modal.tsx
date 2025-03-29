@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -33,9 +33,12 @@ import { Badge } from "@/components/ui/badge";
 import { projectService } from "@/services/project-service";
 import { useRoles } from "@/contexts/roles-context";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/firebase-context";
+import { useProjects } from "@/contexts/projects-context";
+import { userService } from "@/services/user-service";
 
 const formSchema = z.object({
-  userId: z.string().min(1, "User is required"),
+  userCode: z.string().min(1, "User code is required"),
   roleId: z.string().min(1, "Role is required"),
 });
 
@@ -60,29 +63,99 @@ export function ManageTeamModal({
   onOpenChange,
   teamMembers,
 }: ManageTeamModalProps) {
-  const { projectRoles } = useRoles();
+  const { projectRoles, refreshProjectRoles } = useRoles();
+  const { refreshProjects } = useProjects();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  // Modal açıldığında proje rollerini yükle
+  useEffect(() => {
+    if (open && projectId) {
+      const loadRoles = async () => {
+        try {
+          setLoading(true);
+          // Rolleri al
+          const rolesList = await refreshProjectRoles(projectId);
+          console.log("Loaded project roles:", rolesList); // Debug için
+        } catch (error) {
+          console.error("Error loading project roles:", error);
+          toast.error("Failed to load project roles");
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      loadRoles();
+    }
+  }, [open, projectId, refreshProjectRoles]);
+
+  // Erişilebilir rolleri memoize et
+  const roles = projectRoles[projectId] || [];
+  console.log("Current project roles:", roles); // Debug için
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      userId: "",
+      userCode: "",
       roleId: "",
     },
   });
 
   async function onSubmit(values: FormValues) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to perform this action");
+        return;
+      }
+      
       setLoading(true);
-      await projectService.addTeamMember(projectId, {
-        id: values.userId,
-        name: "User Name", // This should come from user service
-        email: "user@example.com", // This should come from user service
+      
+      // Get the selected user
+      const userToAdd = await userService.getUserByCode(values.userCode);
+      
+      if (!userToAdd) {
+        toast.error("User not found");
+        setLoading(false);
+        return;
+      }
+      
+      // Get the selected role
+      const selectedRole = roles.find(role => role.id === values.roleId);
+      
+      if (!selectedRole) {
+        toast.error("Role not found");
+        setLoading(false);
+        return;
+      }
+      
+      // Check if user is already a member
+      const isAlreadyMember = teamMembers.some(member => member.id === userToAdd.id);
+      
+      if (isAlreadyMember) {
+        toast.error("User is already a member of this project");
+        setLoading(false);
+        return;
+      }
+      
+      // Add the team member - id özelliğini kaldırıyoruz çünkü addTeamMember fonksiyonu otomatik ID oluşturuyor
+      await projectService.addTeamMember(user.uid, projectId, {
+        name: userToAdd.name,
+        email: userToAdd.email,
         roleId: values.roleId,
-        systemRoleIds: [],
+        systemRoleIds: userToAdd.systemRoleIds || [],
       });
+      
+      // Refresh the project and roles data
+      await refreshProjects();
+      await refreshProjectRoles(projectId);
+      
       form.reset();
       toast.success("Team member added successfully");
+      
+      // Close the modal
+      if (onOpenChange) {
+        onOpenChange(false);
+      }
     } catch (error) {
       console.error("Error adding team member:", error);
       toast.error("Failed to add team member");
@@ -93,9 +166,15 @@ export function ManageTeamModal({
 
   async function handleRemoveMember(memberId: string) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to perform this action");
+        return;
+      }
+      
       setLoading(true);
-      await projectService.removeTeamMember(projectId, memberId);
-      toast.success("Team member removed successfully");
+      await projectService.removeTeamMember(user.uid, projectId, memberId);
+      await refreshProjects();
+      toast.success("Team member removed");
     } catch (error) {
       console.error("Error removing team member:", error);
       toast.error("Failed to remove team member");
@@ -103,8 +182,6 @@ export function ManageTeamModal({
       setLoading(false);
     }
   }
-
-  const roles = projectRoles[projectId] || [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -159,25 +236,16 @@ export function ManageTeamModal({
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="userId"
+                name="userCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>User</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a user" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="user1">John Doe</SelectItem>
-                        <SelectItem value="user2">Jane Smith</SelectItem>
-                        {/* This should be populated from user service */}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>User Code</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Enter user code" 
+                        {...field} 
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CheckCircle, XCircle, UserCheck, HelpCircle } from "lucide-react";
 import { invitationService, TeamInvitation } from "@/services/invitation-service";
 import { teamService } from "@/services/team-service";
-import { useAuth } from "@/contexts/auth-context";
+import { useFirebase } from "@/contexts/firebase-context";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,15 +13,26 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export function TeamInvitations() {
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user } = useFirebase(); // Sadece Firebase Auth user'ını kullan
 
   useEffect(() => {
     async function fetchInvitations() {
-      if (!user?.id) return;
+      if (!user) {
+        console.log("User not authenticated");
+        setLoading(false);
+        return;
+      }
+      
+      console.log("Fetching invitations for user:", user.uid);
       
       try {
-        const pendingInvitations = await invitationService.getPendingInvitationsForUser(user.id);
-        setInvitations(pendingInvitations);
+        // Şimdi kullanıcının kendisine gönderilen davetleri almak için yeni bir metod kullanıyoruz
+        const pendingInvitations = await invitationService.getInvitationsForInvitee(user.uid);
+        console.log("Pending invitations:", pendingInvitations);
+        
+        // Sadece bekleyen davetleri göster
+        const filteredInvitations = pendingInvitations.filter(inv => inv.status === 'pending');
+        setInvitations(filteredInvitations);
       } catch (error) {
         console.error("Error fetching team invitations:", error);
         toast.error("Failed to load team invitations");
@@ -31,21 +42,22 @@ export function TeamInvitations() {
     }
 
     fetchInvitations();
-  }, [user?.id]);
+  }, [user]);
 
-  async function handleAcceptInvitation(invitationId: string) {
+  async function handleAcceptInvitation(invitationId: string, inviterId: string) {
     try {
-      if (!user?.id) return;
+      if (!user) return;
       
-      await invitationService.updateInvitationStatus(invitationId, "accepted");
+      // Daveti gönderen kullanıcının ID'sini kullanıyoruz
+      await invitationService.updateInvitationStatus(inviterId, invitationId, "accepted");
       
       // Get the updated invitation to extract role information
-      const invitation = await invitationService.getInvitation(invitationId);
+      const invitation = await invitationService.getInvitation(inviterId, invitationId);
       
       // Add user to team with the role from invitation
-      await teamService.addTeamMember({
-        name: user.name,
-        email: user.email,
+      await teamService.addTeamMember(inviterId, {
+        name: user.displayName || "Unknown User",
+        email: user.email || "",
         role: invitation.role,
       });
       
@@ -57,9 +69,10 @@ export function TeamInvitations() {
     }
   }
 
-  async function handleRejectInvitation(invitationId: string) {
+  async function handleRejectInvitation(invitationId: string, inviterId: string) {
     try {
-      await invitationService.updateInvitationStatus(invitationId, "rejected");
+      // Daveti gönderen kullanıcının ID'sini kullanıyoruz
+      await invitationService.updateInvitationStatus(inviterId, invitationId, "rejected");
       setInvitations(invitations.filter(inv => inv.id !== invitationId));
       toast.success("Team invitation rejected");
     } catch (error) {
@@ -136,14 +149,14 @@ export function TeamInvitations() {
                   size="sm" 
                   variant="outline"
                   className="text-destructive border-destructive hover:bg-destructive/10"
-                  onClick={() => handleRejectInvitation(invitation.id)}
+                  onClick={() => handleRejectInvitation(invitation.id, invitation.inviterId)}
                 >
                   <XCircle className="mr-2 h-4 w-4" />
                   Decline
                 </Button>
                 <Button 
                   size="sm"
-                  onClick={() => handleAcceptInvitation(invitation.id)}
+                  onClick={() => handleAcceptInvitation(invitation.id, invitation.inviterId)}
                 >
                   <CheckCircle className="mr-2 h-4 w-4" />
                   Accept

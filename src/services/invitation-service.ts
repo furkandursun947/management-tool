@@ -25,10 +25,16 @@ export interface TeamInvitation {
 }
 
 class InvitationService {
-  private collection = collection(db, "teamInvitations");
+  private readonly usersCollection = "users";
+  private readonly invitationsSubcollection = "teamInvitations";
 
-  async getInvitation(id: string): Promise<TeamInvitation> {
-    const docRef = doc(this.collection, id);
+  // Kullanıcıya özgü teamInvitations koleksiyonuna referans oluşturur
+  private getUserInvitationsRef(userId: string) {
+    return collection(db, this.usersCollection, userId, this.invitationsSubcollection);
+  }
+
+  async getInvitation(userId: string, id: string): Promise<TeamInvitation> {
+    const docRef = doc(this.getUserInvitationsRef(userId), id);
     const docSnap = await getDoc(docRef);
 
     if (!docSnap.exists()) {
@@ -49,36 +55,38 @@ class InvitationService {
     };
   }
 
-  async createInvitation(invitationData: Omit<TeamInvitation, "id" | "createdAt" | "updatedAt" | "status">): Promise<TeamInvitation> {
-    const docRef = await addDoc(this.collection, {
+  async createInvitation(userId: string, invitationData: Omit<TeamInvitation, "id" | "createdAt" | "updatedAt" | "status">): Promise<TeamInvitation> {
+    const invitationsRef = this.getUserInvitationsRef(userId);
+    const docRef = await addDoc(invitationsRef, {
       ...invitationData,
       status: 'pending',
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     });
 
-    return this.getInvitation(docRef.id);
+    return this.getInvitation(userId, docRef.id);
   }
 
-  async updateInvitationStatus(id: string, status: 'accepted' | 'rejected'): Promise<TeamInvitation> {
-    const docRef = doc(this.collection, id);
+  async updateInvitationStatus(userId: string, id: string, status: 'accepted' | 'rejected'): Promise<TeamInvitation> {
+    const docRef = doc(this.getUserInvitationsRef(userId), id);
     await updateDoc(docRef, {
       status,
       updatedAt: Timestamp.now(),
     });
 
-    return this.getInvitation(id);
+    return this.getInvitation(userId, id);
   }
 
-  async deleteInvitation(id: string): Promise<void> {
-    const docRef = doc(this.collection, id);
+  async deleteInvitation(userId: string, id: string): Promise<void> {
+    const docRef = doc(this.getUserInvitationsRef(userId), id);
     await deleteDoc(docRef);
   }
 
-  async getPendingInvitationsForUser(userId: string): Promise<TeamInvitation[]> {
+  async getPendingInvitationsForUser(userId: string, inviteeId: string): Promise<TeamInvitation[]> {
+    const invitationsRef = this.getUserInvitationsRef(userId);
     const q = query(
-      this.collection, 
-      where("inviteeId", "==", userId),
+      invitationsRef, 
+      where("inviteeId", "==", inviteeId),
       where("status", "==", "pending")
     );
     
@@ -100,9 +108,9 @@ class InvitationService {
   }
 
   async getInvitationsSentByUser(userId: string): Promise<TeamInvitation[]> {
-    const q = query(this.collection, where("inviterId", "==", userId));
+    const invitationsRef = this.getUserInvitationsRef(userId);
+    const querySnapshot = await getDocs(invitationsRef);
     
-    const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
@@ -117,6 +125,47 @@ class InvitationService {
         updatedAt: data.updatedAt?.toDate(),
       };
     });
+  }
+
+  // Davetleri karşılayan kullanıcıların davetlerini almak için
+  // Bu, bir kullanıcının kendisine gönderilen davetleri görmesi için kullanılır
+  async getInvitationsForInvitee(userId: string): Promise<TeamInvitation[]> {
+    // Bu işlev, diğer kullanıcıların koleksiyonlarına erişmek gerektiğinden karmaşıktır
+    // Şu anda, inviteeId değeri userId olan tüm kullanıcıların koleksiyonlarını taramalıyız
+    // Ancak bu verimli değildir - bu sorunu çözmek için özel bir koleksiyon veya farklı bir yapı gerekebilir
+    
+    // Şimdilik basitleştirilmiş bir yaklaşım kullanıyoruz - gerçek uygulamada
+    // tüm kullanıcıları elde etmek ve her birinin davet koleksiyonunu kontrol etmek gerekecektir
+    const usersRef = collection(db, this.usersCollection);
+    const userSnapshots = await getDocs(usersRef);
+    
+    let allInvitations: TeamInvitation[] = [];
+    
+    // Her kullanıcının davet koleksiyonunu kontrol et
+    for (const userDoc of userSnapshots.docs) {
+      const invitationsRef = collection(userDoc.ref, this.invitationsSubcollection);
+      const q = query(invitationsRef, where("inviteeId", "==", userId));
+      const invitationSnapshots = await getDocs(q);
+      
+      const userInvitations = invitationSnapshots.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          inviterId: data.inviterId,
+          inviterName: data.inviterName,
+          inviteeId: data.inviteeId,
+          inviteeName: data.inviteeName,
+          role: data.role,
+          status: data.status,
+          createdAt: data.createdAt?.toDate(),
+          updatedAt: data.updatedAt?.toDate(),
+        };
+      });
+      
+      allInvitations = [...allInvitations, ...userInvitations];
+    }
+    
+    return allInvitations;
   }
 }
 

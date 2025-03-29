@@ -34,6 +34,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { ManageRolesModal } from "@/components/projects/manage-roles-modal";
 import { ManageTeamModal } from "@/components/projects/manage-team-modal";
 import { WithProjectPermissions } from "@/components/auth/with-permissions";
+import { useAuth } from "@/contexts/firebase-context";
 
 interface ProjectWithRoles extends Project {
   teamMembers: Array<TeamMember & { roleId: string }>;
@@ -85,13 +86,14 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+  const { user } = useAuth();
 
   useEffect(() => {
     async function fetchProject() {
-      if (!projectId) return;
+      if (!projectId || !user) return;
       
       try {
-        const projectData = await projectService.getProject(projectId);
+        const projectData = await projectService.getProject(user.uid, projectId);
         setProject(projectData);
       } catch (error) {
         console.error("Error fetching project:", error);
@@ -107,7 +109,7 @@ export default function ProjectDetailPage() {
     if (tabParam && ["overview", "tasks", "team"].includes(tabParam)) {
       setActiveTab(tabParam);
     }
-  }, [projectId, searchParams]);
+  }, [projectId, searchParams, user]);
 
   // Handle changing tabs
   const handleTabChange = (value: string) => {
@@ -381,10 +383,7 @@ export default function ProjectDetailPage() {
                     <CardTitle>Tasks</CardTitle>
                     <CardDescription>Manage project tasks</CardDescription>
                   </div>
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Task
-                  </Button>
+                  <AddTaskModal projectId={safeProjectId} />
                 </div>
               </CardHeader>
               <CardContent>

@@ -8,7 +8,7 @@ interface ProjectsContextType {
   loading: boolean;
   error: Error | null;
   refreshProjects: () => Promise<void>;
-  addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'teamMembers' | 'tasks' | 'roles' | 'createdBy'>) => Promise<void>;
   updateProject: (id: string, project: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   addTask: (projectId: string, task: Omit<Project['tasks'][0], 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
@@ -26,9 +26,14 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProjects = async () => {
     try {
+      if (!user) {
+        setProjects([]);
+        return;
+      }
+      
       setLoading(true);
       setError(null);
-      const fetchedProjects = await projectService.getProjects();
+      const fetchedProjects = await projectService.getProjects(user.uid);
       setProjects(fetchedProjects);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch projects'));
@@ -44,9 +49,19 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const addProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'teamMembers' | 'tasks' | 'roles' | 'createdBy'>) => {
     try {
-      await projectService.addProject(project);
+      if (!user) {
+        toast.error('You must be logged in to add a project');
+        throw new Error('User not authenticated');
+      }
+      
+      // Kullanıcı bilgilerini al
+      const userId = user.uid;
+      const userName = user.displayName || 'Anonymous';
+      const userEmail = user.email || '';
+      
+      await projectService.addProject(project, userId, userName, userEmail);
       await refreshProjects();
       toast.success('Project added successfully');
     } catch (err) {
@@ -57,7 +72,12 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const updateProject = async (id: string, project: Partial<Project>) => {
     try {
-      await projectService.updateProject(id, project);
+      if (!user) {
+        toast.error('You must be logged in to update a project');
+        throw new Error('User not authenticated');
+      }
+      
+      await projectService.updateProject(user.uid, id, project);
       await refreshProjects();
       toast.success('Project updated successfully');
     } catch (err) {
@@ -68,7 +88,12 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProject = async (id: string) => {
     try {
-      await projectService.deleteProject(id);
+      if (!user) {
+        toast.error('You must be logged in to delete a project');
+        throw new Error('User not authenticated');
+      }
+      
+      await projectService.deleteProject(user.uid, id);
       await refreshProjects();
       toast.success('Project deleted successfully');
     } catch (err) {
@@ -79,7 +104,12 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const addTask = async (projectId: string, task: Omit<Project['tasks'][0], 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
-      await projectService.addTask(projectId, task);
+      if (!user) {
+        toast.error('You must be logged in to add a task');
+        throw new Error('User not authenticated');
+      }
+      
+      await projectService.addTask(user.uid, projectId, task);
       await refreshProjects();
       toast.success('Task added successfully');
     } catch (err) {
@@ -88,9 +118,16 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Update Task ve Delete Task fonksiyonlarını proje servisinden kaldırdık, 
+  // ancak burada ara yüz tutarlılığı için bunları koruyalım
   const updateTask = async (projectId: string, taskId: string, task: Partial<Project['tasks'][0]>) => {
     try {
-      await projectService.updateTask(projectId, taskId, task);
+      if (!user) {
+        toast.error('You must be logged in to update a task');
+        throw new Error('User not authenticated');
+      }
+      
+      await projectService.updateTask(user.uid, projectId, taskId, task);
       await refreshProjects();
       toast.success('Task updated successfully');
     } catch (err) {
@@ -101,7 +138,12 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = async (projectId: string, taskId: string) => {
     try {
-      await projectService.deleteTask(projectId, taskId);
+      if (!user) {
+        toast.error('You must be logged in to delete a task');
+        throw new Error('User not authenticated');
+      }
+      
+      await projectService.deleteTask(user.uid, projectId, taskId);
       await refreshProjects();
       toast.success('Task deleted successfully');
     } catch (err) {

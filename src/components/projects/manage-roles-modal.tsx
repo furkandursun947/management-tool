@@ -36,12 +36,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { projectService } from "@/services/project-service";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/contexts/firebase-context";
 
 const formSchema = z.object({
-  name: z.string().min(1, "Role name is required"),
-  description: z.string().min(1, "Description is required"),
-  permissions: z.array(z.string()).min(1, "At least one permission is required"),
-  teamMemberId: z.string().min(1, "Team member must be selected"),
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  description: z.string().optional(),
+  permissions: z.array(z.string()).min(1, "Select at least one permission"),
+  teamMemberId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -55,6 +58,7 @@ interface ManageRolesModalProps {
 export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesModalProps) {
   const { projectRoles, refreshProjectRoles } = useRoles();
   const { projects } = useProjects();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const project = projects.find(p => p.id === projectId);
@@ -72,20 +76,25 @@ export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesM
 
   async function onSubmit(values: FormValues) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to perform this action");
+        return;
+      }
+      
       setLoading(true);
       
       // Create the role
-      const newRole = await rolesService.createProjectRole(projectId, {
+      const newRole = await rolesService.createProjectRole(user.uid, projectId, {
         name: values.name,
-        description: values.description,
+        description: values.description || "",
         permissions: values.permissions,
       });
 
-      // Assign the role to the team member
-      if (project) {
+      // Assign the role to the team member if one was selected
+      if (project && values.teamMemberId) {
         const teamMember = project.teamMembers.find(member => member.id === values.teamMemberId);
         if (teamMember) {
-          await projectService.addTeamMember(projectId, {
+          await projectService.addTeamMember(user.uid, projectId, {
             ...teamMember,
             roleId: newRole.id,
           });
@@ -106,8 +115,13 @@ export function ManageRolesModal({ projectId, open, onOpenChange }: ManageRolesM
 
   async function handleDeleteRole(roleId: string) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to perform this action");
+        return;
+      }
+      
       setLoading(true);
-      await rolesService.deleteProjectRole(projectId, roleId);
+      await rolesService.deleteProjectRole(user.uid, projectId, roleId);
       await refreshProjectRoles(projectId);
       toast.success("Role deleted successfully");
     } catch (error) {
