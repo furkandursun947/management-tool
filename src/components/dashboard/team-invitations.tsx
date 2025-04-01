@@ -16,9 +16,9 @@ import { useRouter } from "next/navigation";
 export function TeamInvitations() {
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useFirebase(); // Sadece Firebase Auth user'ını kullan
-  const { refreshTeams } = useTeams(); // Takım listesini yenilemek için
-  const router = useRouter(); // Router ekle
+  const { user } = useFirebase(); // Only use Firebase Auth user
+  const { refreshTeams } = useTeams(); // To refresh the team list
+  const router = useRouter(); // Add router
 
   useEffect(() => {
     async function fetchInvitations() {
@@ -31,11 +31,11 @@ export function TeamInvitations() {
       console.log("Fetching invitations for user:", user.uid);
       
       try {
-        // Şimdi kullanıcının kendisine gönderilen davetleri almak için yeni bir metod kullanıyoruz
+        // Now using a new method to get invitations sent to the user
         const pendingInvitations = await invitationService.getInvitationsForInvitee(user.uid);
         console.log("Pending invitations:", pendingInvitations);
         
-        // Sadece bekleyen davetleri göster
+        // Only show pending invitations
         const filteredInvitations = pendingInvitations.filter(inv => inv.status === 'pending');
         setInvitations(filteredInvitations);
       } catch (error) {
@@ -53,34 +53,34 @@ export function TeamInvitations() {
     try {
       if (!user) return;
       
-      // Daveti gönderen kullanıcının ID'sini kullanıyoruz
+      // Using the inviter's ID
       await invitationService.updateInvitationStatus(inviterId, invitationId, "accepted");
       
-      // Güncellenmiş daveti al
+      // Get the updated invitation
       const invitation = await invitationService.getInvitation(inviterId, invitationId);
       
       try {
-        // Davet edenin kullanıcı bilgilerini al
+        // Get the inviter's user information
         const inviterUser = await userService.getUser(inviterId);
         
-        // Eğer bu bir takım daveti ise (teamId ve teamName var ise)
+        // If this is a team invitation (if teamId and teamName exist)
         if (invitation.teamId && invitation.teamName) {
-          console.log(`Takım daveti kabul edildi: ${invitation.teamName} (${invitation.teamId})`);
+          console.log(`Team invitation accepted: ${invitation.teamName} (${invitation.teamId})`);
           
-          // Davet edileni davet edenin takımına ekle
+          // Add the invitee to the inviter's team
           await teamService.addTeamMember(inviterId, {
             name: user.displayName || "Unknown User",
             email: user.email || "",
             role: invitation.role,
           });
           
-          // ÖNEMLİ: Takımı kullanıcının kendi teams koleksiyonuna ekle
-          // Bu işlem, kullanıcının "Takımlarım" listesinde bu takımı görmesini sağlar
+          // IMPORTANT: Add the team to the user's own teams collection
+          // This allows the user to see this team in their "My Teams" list
           try {
-            // Takımın ayrıntılarını alalım
+            // Get the team details
             const team = await teamService.getTeam(inviterId, invitation.teamId);
             if (team) {
-              // Kabul eden kullanıcının teams koleksiyonuna takımı ekle
+              // Add the team to the accepting user's teams collection
               await teamService.addTeamToUserTeams(user.uid, {
                 id: team.id,
                 name: team.name,
@@ -89,54 +89,54 @@ export function TeamInvitations() {
                 createdAt: team.createdAt,
                 updatedAt: new Date()
               });
-              console.log("Takım kullanıcının teams koleksiyonuna eklendi:", team.id);
+              console.log("Team added to user's teams collection:", team.id);
             }
           } catch (teamError) {
-            console.error("Takım kullanıcının koleksiyonuna eklenirken hata:", teamError);
+            console.error("Error adding team to user's collection:", teamError);
           }
           
-          toast.success(`${invitation.teamName} takımına katıldınız`);
+          toast.success(`You've joined the ${invitation.teamName} team`);
           
-          // Takım listesini yenile (tamamlanmasını bekle)
+          // Refresh team list (wait for completion)
           await refreshTeams();
           
-          // Takım sayfasına yönlendir (isteğe bağlı)
+          // Redirect to team page (optional)
           // router.push(`/team/${invitation.teamId}`);
           
           setInvitations(invitations.filter(inv => inv.id !== invitationId));
         } else {
-          // Normal davet işlemleri (geriye dönük uyumluluk için)
+          // Normal invitation process (for backward compatibility)
           
-          // 1. Davet edeni kendi takımına ekle (karşılıklı ilişki)
+          // 1. Add the inviter to your team (mutual relationship)
           await teamService.addTeamMember(user.uid, {
             name: invitation.inviterName,
-            email: inviterUser.email || "",  // Kullanıcı verisinden email al
+            email: inviterUser.email || "",  // Get email from user data
             role: invitation.role,
           });
           
-          // 2. Davet edileni davet edenin takımına ekle
+          // 2. Add the invitee to the inviter's team
           await teamService.addTeamMember(inviterId, {
             name: user.displayName || "Unknown User",
             email: user.email || "",
             role: invitation.role,
           });
           
-          toast.success("Takım daveti kabul edildi");
+          toast.success("Team invitation accepted");
           
-          // Takım listesini yenile (tamamlanmasını bekle)
+          // Refresh team list (wait for completion)
           await refreshTeams();
           
           setInvitations(invitations.filter(inv => inv.id !== invitationId));
         }
         
-        console.log("Davet kabul edildi ve her iki kullanıcının takımına da eklendi");
+        console.log("Invitation accepted and added to both users' teams");
       } catch (userError) {
-        console.error("Kullanıcı bilgileri alınamadı:", userError);
-        toast.error("Kullanıcı bilgileri alınamadı");
+        console.error("Failed to get user information:", userError);
+        toast.error("Failed to get user information");
       }
     } catch (error) {
       console.error("Error accepting invitation:", error);
-      toast.error("Daveti kabul ederken bir hata oluştu");
+      toast.error("An error occurred while accepting the invitation");
     }
   }
 
@@ -144,15 +144,15 @@ export function TeamInvitations() {
     try {
       if (!user) return;
       
-      // Daveti gönderen kullanıcının ID'sini kullanıyoruz
+      // Using the inviter's ID
       await invitationService.updateInvitationStatus(inviterId, invitationId, "rejected");
       
       setInvitations(invitations.filter(inv => inv.id !== invitationId));
-      toast.success("Takım daveti reddedildi");
-      console.log("Davet reddedildi, ID:", invitationId, "Gönderen:", inviterId);
+      toast.success("Team invitation rejected");
+      console.log("Invitation rejected, ID:", invitationId, "Sender:", inviterId);
     } catch (error) {
       console.error("Error rejecting invitation:", error);
-      toast.error("Daveti reddetme sırasında bir hata oluştu");
+      toast.error("An error occurred while rejecting the invitation");
     }
   }
 
@@ -190,13 +190,13 @@ export function TeamInvitations() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <UserCheck className="h-5 w-5" />
-          Takım Davetleri
+          Team Invitations
           <Tooltip>
             <TooltipTrigger asChild>
               <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent>
-              <p>Diğer kullanıcılardan gelen takım davetleri burada listelenir.</p>
+              <p>Team invitations from other users are listed here.</p>
             </TooltipContent>
           </Tooltip>
         </CardTitle>
@@ -213,18 +213,18 @@ export function TeamInvitations() {
                   <AvatarFallback>{invitation.inviterName.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium">{invitation.inviterName} tarafından davet</p>
+                  <p className="font-medium">Invitation from {invitation.inviterName}</p>
                   {invitation.teamId && invitation.teamName && (
                     <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                      Takım: {invitation.teamName}
+                      Team: {invitation.teamName}
                     </p>
                   )}
                   <div className="flex flex-col sm:flex-row sm:gap-2 text-sm text-muted-foreground">
-                    <p>Rol: {invitation.role}</p>
+                    <p>Role: {invitation.role}</p>
                     <p className="hidden sm:inline">•</p>
-                    <p>Gönderen: {invitation.inviterEmail || "N/A"}</p>
+                    <p>From: {invitation.inviterEmail || "N/A"}</p>
                     <p className="hidden sm:inline">•</p>
-                    <p>Alıcı: {user?.email || "N/A"}</p>
+                    <p>To: {user?.email || "N/A"}</p>
                   </div>
                 </div>
               </div>
@@ -236,14 +236,14 @@ export function TeamInvitations() {
                   onClick={() => handleRejectInvitation(invitation.id, invitation.inviterId)}
                 >
                   <XCircle className="mr-2 h-4 w-4" />
-                  Reddet
+                  Reject
                 </Button>
                 <Button 
                   size="sm"
                   onClick={() => handleAcceptInvitation(invitation.id, invitation.inviterId)}
                 >
                   <CheckCircle className="mr-2 h-4 w-4" />
-                  Kabul Et
+                  Accept
                 </Button>
               </div>
             </div>

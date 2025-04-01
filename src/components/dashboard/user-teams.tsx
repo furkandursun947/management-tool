@@ -5,7 +5,6 @@ import { Users, Building, Calendar, HelpCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
-import { tr } from "date-fns/locale";
 import { useTeams } from "@/contexts/teams-context";
 import { useFirebase } from "@/contexts/firebase-context";
 import { toast } from "sonner";
@@ -19,7 +18,7 @@ export function UserTeams() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Üye Olduğum Takımlar</CardTitle>
+          <CardTitle>Teams I'm a Member Of</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -47,13 +46,13 @@ export function UserTeams() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Building className="h-5 w-5" />
-          Üye Olduğum Takımlar
+          Teams I'm a Member Of
           <Tooltip>
             <TooltipTrigger asChild>
               <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent>
-              <p>Üye olduğunuz takımlar burada listelenir.</p>
+              <p>Teams that you are a member of are listed here.</p>
             </TooltipContent>
           </Tooltip>
         </CardTitle>
@@ -75,14 +74,14 @@ export function UserTeams() {
                   )}
                   <div className="flex items-center mt-1 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3 mr-1" />
-                    <span>{formatDistanceToNow(team.createdAt, { addSuffix: true, locale: tr })} oluşturuldu</span>
+                    <span>Created {formatDistanceToNow(team.createdAt, { addSuffix: true })}</span>
                   </div>
                 </div>
               </div>
               <div>
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Users className="h-3 w-3" />
-                  <span>Takım Üyesi</span>
+                  <span>Team Member</span>
                 </Badge>
               </div>
             </div>

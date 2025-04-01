@@ -22,13 +22,13 @@ export function TeamList() {
       }
       
       try {
-        console.log("Takım üyeleri getiriliyor:", user.uid);
+        console.log("Fetching team members:", user.uid);
         const members = await teamService.getTeamMembers(user.uid);
-        console.log("Takım üyeleri:", members);
+        console.log("Team members:", members);
         setTeamMembers(members);
       } catch (error) {
-        console.error("Takım üyeleri getirilirken hata oluştu:", error);
-        toast.error("Takım üyeleri yüklenemedi");
+        console.error("Error fetching team members:", error);
+        toast.error("Failed to load team members");
       } finally {
         setLoading(false);
       }
@@ -43,10 +43,10 @@ export function TeamList() {
     try {
       await teamService.deleteTeamMember(user.uid, id);
       setTeamMembers(members => members.filter(member => member.id !== id));
-      toast.success("Takım üyesi kaldırıldı");
+      toast.success("Team member removed");
     } catch (error) {
-      console.error("Takım üyesi kaldırılırken hata oluştu:", error);
-      toast.error("Takım üyesi kaldırılamadı");
+      console.error("Error removing team member:", error);
+      toast.error("Failed to remove team member");
     }
   }
 
@@ -54,7 +54,7 @@ export function TeamList() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Takım Üyeleri</CardTitle>
+          <CardTitle>Team Members</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -83,13 +83,13 @@ export function TeamList() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />
-          Takım Üyeleri
+          Team Members
           <Tooltip>
             <TooltipTrigger asChild>
               <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent>
-              <p>Takımınızdaki üyeler.</p>
+              <p>Members in your team.</p>
             </TooltipContent>
           </Tooltip>
         </CardTitle>
@@ -108,7 +108,7 @@ export function TeamList() {
                 <div>
                   <p className="font-medium">{member.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    Rol: {member.role}
+                    Role: {member.role}
                   </p>
                 </div>
               </div>

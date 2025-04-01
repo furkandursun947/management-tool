@@ -16,7 +16,6 @@ import { Team, TeamMember } from "@/services/team-service";
 import { invitationService, TeamInvitation } from "@/services/invitation-service";
 import { ArrowLeft, Users, Clock, UserPlus, Calendar, Building2, Settings } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { tr } from "date-fns/locale";
 import { toast } from "sonner";
 import { InviteTeamMemberModal } from "@/components/teams/invite-team-member-modal";
 
@@ -38,35 +37,35 @@ export default function TeamDetailPage() {
       if (!user || !params.id) return;
       
       try {
-        // Takımı bul
+        // Find the team
         const teamId = Array.isArray(params.id) ? params.id[0] : params.id;
         const foundTeam = teams.find(t => t.id === teamId);
         
         if (!foundTeam) {
-          toast.error("Takım bulunamadı");
+          toast.error("Team not found");
           router.push("/team");
           return;
         }
         
         setTeam(foundTeam);
         
-        // Takım üyelerini getir
+        // Get team members
         const members = await getTeamMembers(teamId);
         setTeamMembers(members);
         
-        // Davetleri getir
+        // Get invitations
         if (user.uid === foundTeam.ownerId) {
-          // Sadece takım sahibi davetleri görebilir
+          // Only team owner can see invitations
           const sentInvitations = await invitationService.getInvitationsSentByUser(user.uid);
           const teamInvitations = sentInvitations.filter(inv => inv.teamId === teamId);
           
-          // Aktif ve geçmiş davetleri ayır
+          // Separate active and previous invitations
           setActiveInvitations(teamInvitations.filter(inv => inv.status === 'pending'));
           setPreviousInvitations(teamInvitations.filter(inv => inv.status !== 'pending'));
         }
       } catch (error) {
         console.error("Error fetching team data:", error);
-        toast.error("Takım bilgileri yüklenirken bir hata oluştu");
+        toast.error("An error occurred while loading team information");
       } finally {
         setIsLoading(false);
       }
@@ -97,9 +96,9 @@ export default function TeamDetailPage() {
       <Layout>
         <div className="container mx-auto py-6">
           <div className="text-center py-10">
-            <h2 className="text-2xl font-bold mb-2">Takım Bulunamadı</h2>
-            <p className="text-muted-foreground mb-6">Bu takım bulunamadı veya erişim izniniz yok.</p>
-            <Button onClick={() => router.push("/team")}>Takımlar Sayfasına Dön</Button>
+            <h2 className="text-2xl font-bold mb-2">Team Not Found</h2>
+            <p className="text-muted-foreground mb-6">This team was not found or you don't have access to it.</p>
+            <Button onClick={() => router.push("/team")}>Return to Teams Page</Button>
           </div>
         </div>
       </Layout>
@@ -110,7 +109,7 @@ export default function TeamDetailPage() {
     if (team && user?.uid === team.ownerId) {
       setInviteModalOpen(true);
     } else {
-      toast.error("Sadece takım sahibi üye davet edebilir");
+      toast.error("Only the team owner can invite members");
     }
   };
 
@@ -125,7 +124,7 @@ export default function TeamDetailPage() {
             <div>
               <h1 className="text-3xl font-bold tracking-tight">{team.name}</h1>
               <p className="text-muted-foreground">
-                {team.description || "Takım açıklaması bulunmuyor"}
+                {team.description || "No team description available"}
               </p>
             </div>
           </div>
@@ -133,11 +132,11 @@ export default function TeamDetailPage() {
           <div className="flex flex-wrap gap-3 mb-4">
             <Badge variant="outline" className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              <span>{formatDistanceToNow(team.createdAt, { addSuffix: true, locale: tr })} oluşturuldu</span>
+              <span>Created {formatDistanceToNow(team.createdAt, { addSuffix: true })}</span>
             </Badge>
             <Badge variant="outline" className="flex items-center gap-1">
               <Users className="h-3 w-3" />
-              <span>{teamMembers.length} Üye</span>
+              <span>{teamMembers.length} Members</span>
             </Badge>
           </div>
         </div>
@@ -146,31 +145,31 @@ export default function TeamDetailPage() {
           <TabsList className="mb-4">
             <TabsTrigger value="members">
               <Users className="h-4 w-4 mr-2" />
-              Takım Üyeleri
+              Team Members
             </TabsTrigger>
             <TabsTrigger value="invitations">
               <Clock className="h-4 w-4 mr-2" />
-              Davetler
+              Invitations
             </TabsTrigger>
             <TabsTrigger value="settings">
               <Settings className="h-4 w-4 mr-2" />
-              Takım Ayarları
+              Team Settings
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="members">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Takım Üyeleri</CardTitle>
+                <CardTitle>Team Members</CardTitle>
                 <Button size="sm" onClick={handleOpenInviteModal}>
                   <UserPlus className="h-4 w-4 mr-2" />
-                  Üye Davet Et
+                  Invite Member
                 </Button>
               </CardHeader>
               <CardContent>
                 {teamMembers.length === 0 ? (
                   <div className="text-center py-6 text-muted-foreground">
-                    Henüz takım üyesi bulunmuyor.
+                    No team members yet.
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -190,7 +189,7 @@ export default function TeamDetailPage() {
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary">{member.role}</Badge>
                           {member.id === team.ownerId && (
-                            <Badge variant="default">Takım Sahibi</Badge>
+                            <Badge variant="default">Team Owner</Badge>
                           )}
                         </div>
                       </div>
@@ -204,19 +203,19 @@ export default function TeamDetailPage() {
           <TabsContent value="invitations">
             <Card>
               <CardHeader>
-                <CardTitle>Bekleyen Davetler</CardTitle>
+                <CardTitle>Pending Invitations</CardTitle>
                 <CardDescription>
-                  Takımınıza katılmaları için gönderdiğiniz bekleyen davetler
+                  Pending invitations sent for users to join your team
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {user?.uid !== team.ownerId ? (
                   <div className="text-center py-6 text-muted-foreground">
-                    Davetleri sadece takım sahibi görüntüleyebilir.
+                    Only the team owner can view invitations.
                   </div>
                 ) : activeInvitations.length === 0 ? (
                   <div className="text-center py-6 text-muted-foreground">
-                    Bekleyen davet bulunmuyor.
+                    No pending invitations.
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -229,15 +228,15 @@ export default function TeamDetailPage() {
                           <div>
                             <p className="font-medium">{invitation.inviteeName}</p>
                             <p className="text-sm text-muted-foreground">
-                              Rol: {invitation.role}
+                              Role: {invitation.role}
                             </p>
                             <div className="flex items-center mt-1 text-xs text-muted-foreground">
                               <Clock className="h-3 w-3 mr-1" />
-                              <span>{formatDistanceToNow(invitation.createdAt, { addSuffix: true, locale: tr })} gönderildi</span>
+                              <span>Sent {formatDistanceToNow(invitation.createdAt, { addSuffix: true })}</span>
                             </div>
                           </div>
                         </div>
-                        <Badge variant="outline">Bekliyor</Badge>
+                        <Badge variant="outline">Pending</Badge>
                       </div>
                     ))}
                   </div>
@@ -247,19 +246,19 @@ export default function TeamDetailPage() {
             
             <Card className="mt-6">
               <CardHeader>
-                <CardTitle>Önceki Davetler</CardTitle>
+                <CardTitle>Previous Invitations</CardTitle>
                 <CardDescription>
-                  Kabul edilen veya reddedilen davetler
+                  History of accepted and rejected invitations
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {user?.uid !== team.ownerId ? (
                   <div className="text-center py-6 text-muted-foreground">
-                    Davetleri sadece takım sahibi görüntüleyebilir.
+                    Only the team owner can view invitation history.
                   </div>
                 ) : previousInvitations.length === 0 ? (
                   <div className="text-center py-6 text-muted-foreground">
-                    Önceki davet bulunmuyor.
+                    No previous invitations.
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -272,18 +271,18 @@ export default function TeamDetailPage() {
                           <div>
                             <p className="font-medium">{invitation.inviteeName}</p>
                             <p className="text-sm text-muted-foreground">
-                              Rol: {invitation.role}
+                              Role: {invitation.role}
                             </p>
                             <div className="flex items-center mt-1 text-xs text-muted-foreground">
                               <Clock className="h-3 w-3 mr-1" />
-                              <span>{formatDistanceToNow(invitation.updatedAt, { addSuffix: true, locale: tr })} güncellendi</span>
+                              <span>Responded {formatDistanceToNow(invitation.updatedAt, { addSuffix: true })}</span>
                             </div>
                           </div>
                         </div>
                         <Badge 
                           variant={invitation.status === 'accepted' ? 'default' : 'destructive'}
                         >
-                          {invitation.status === 'accepted' ? 'Kabul Edildi' : 'Reddedildi'}
+                          {invitation.status === 'accepted' ? 'Accepted' : 'Rejected'}
                         </Badge>
                       </div>
                     ))}
@@ -296,21 +295,33 @@ export default function TeamDetailPage() {
           <TabsContent value="settings">
             <Card>
               <CardHeader>
-                <CardTitle>Takım Ayarları</CardTitle>
+                <CardTitle>Team Settings</CardTitle>
                 <CardDescription>
-                  Takım bilgilerini düzenleyin
+                  Manage team details and configuration
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {user?.uid !== team.ownerId ? (
                   <div className="text-center py-6 text-muted-foreground">
-                    Takım ayarlarını sadece takım sahibi değiştirebilir.
+                    Only the team owner can access team settings.
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     <p className="text-muted-foreground">
-                      Takım ayarları yakında eklenecektir.
+                      Team settings will be available soon.
                     </p>
+                    
+                    <Separator />
+                    
+                    <div>
+                      <h3 className="text-lg font-medium mb-2">Danger Zone</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        These actions are destructive and cannot be reversed.
+                      </p>
+                      <Button variant="destructive">
+                        Delete Team
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>

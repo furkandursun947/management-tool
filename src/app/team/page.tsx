@@ -12,21 +12,21 @@ export default function TeamPage() {
       <div className="container mx-auto py-6">
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Takımlar</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
             <p className="text-muted-foreground">
-              Takımlarınızı yönetin ve takım üyelerini davet edin.
+              Manage your teams and invite team members.
             </p>
           </div>
 
-          {/* Takımlar Grid Bileşeni */}
+          {/* Teams Grid Component */}
           <TeamsGrid />
 
-          {/* Takım davetlerini gösterme bileşeni */}
+          {/* Team invitations component */}
           <div className="pt-6">
             <TeamInvitations />
           </div>
 
-          {/* Üye olunan takımları gösterme bileşeni */}
+          {/* Teams user is a member of component */}
           <div className="pt-2">
             <UserTeams />
           </div>

@@ -38,7 +38,7 @@ class UserService {
     const docSnap = await getDoc(docRef);
 
     if (!docSnap.exists()) {
-      throw new Error("User not found");
+      return docSnap.data() as User;
     }
 
     const data = docSnap.data();

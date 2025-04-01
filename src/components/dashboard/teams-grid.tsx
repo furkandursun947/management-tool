@@ -32,7 +32,7 @@ export function TeamsGrid() {
       setDeletingTeamId(teamId);
       await deleteTeam(teamId);
     } catch (error) {
-      console.error("Takım silinirken hata oluştu:", error);
+      console.error("Error deleting team:", error);
     } finally {
       setDeletingTeamId(null);
     }
@@ -51,7 +51,7 @@ export function TeamsGrid() {
     return (
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold tracking-tight">Takımlarım</h2>
+          <h2 className="text-2xl font-bold tracking-tight">My Teams</h2>
           <Skeleton className="h-10 w-28" />
         </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -78,10 +78,10 @@ export function TeamsGrid() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold tracking-tight">Takımlarım</h2>
+        <h2 className="text-2xl font-bold tracking-tight">My Teams</h2>
         <Button onClick={() => setCreateModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Yeni Takım
+          New Team
         </Button>
       </div>
 
@@ -89,13 +89,13 @@ export function TeamsGrid() {
         <Card className="text-center p-6">
           <div className="flex flex-col items-center gap-2 py-6">
             <User2 className="h-10 w-10 text-muted-foreground" />
-            <h3 className="text-lg font-medium">Henüz bir takımınız yok</h3>
+            <h3 className="text-lg font-medium">You don't have any teams yet</h3>
             <p className="text-sm text-muted-foreground pb-4">
-              Projelerinizi yönetmek için bir takım oluşturun ve üyeleri davet edin.
+              Create a team and invite members to manage your projects.
             </p>
             <Button onClick={() => setCreateModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Takım Oluştur
+              Create Team
             </Button>
           </div>
         </Card>
@@ -123,14 +123,14 @@ export function TeamsGrid() {
                         className="cursor-pointer"
                       >
                         <ExternalLink className="mr-2 h-4 w-4" />
-                        Takım Detayları
+                        Team Details
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => handleInviteMember(team)}
                         className="cursor-pointer"
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
-                        Üye Davet Et
+                        Invite Member
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
@@ -141,12 +141,12 @@ export function TeamsGrid() {
                         {deletingTeamId === team.id ? (
                           <>
                             <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-destructive border-t-background"></span>
-                            Siliniyor...
+                            Deleting...
                           </>
                         ) : (
                           <>
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Takımı Sil
+                            Delete Team
                           </>
                         )}
                       </DropdownMenuItem>
@@ -161,12 +161,12 @@ export function TeamsGrid() {
                 <div className="flex items-center space-x-2">
                   <User2 className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">
-                    {teamMembers && teamMembers[team.id] ? teamMembers[team.id].length : 0} Üye
+                    {teamMembers && teamMembers[team.id] ? teamMembers[team.id].length : 0} Members
                   </span>
                 </div>
               </CardContent>
               <CardFooter className="border-t pt-4 text-xs text-muted-foreground">
-                {formatDistanceToNow(team.createdAt, { addSuffix: true, locale: tr })} oluşturuldu
+                Created {formatDistanceToNow(team.createdAt, { addSuffix: true })}
               </CardFooter>
             </Card>
           ))}

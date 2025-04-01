@@ -26,64 +26,64 @@ export default function ProfilePage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
   
-  // Profil bilgilerini yükle
+  // Load profile information
   useEffect(() => {
     if (user) {
       setDisplayName(user.name || "");
     }
   }, [user]);
   
-  // Kullanıcı verilerini güncelle
+  // Update user data
   const handleUpdateProfile = async () => {
     if (!user || !displayName.trim()) return;
     
     try {
       setIsUpdating(true);
       await userService.updateUser(user.id, { name: displayName });
-      toast.success("Profil güncellendi");
+      toast.success("Profile updated");
     } catch (error) {
-      console.error("Profil güncellenirken hata:", error);
-      toast.error("Profil güncellenemedi");
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
     } finally {
       setIsUpdating(false);
     }
   };
   
-  // Kullanıcı kodunu panoya kopyala
+  // Copy user code to clipboard
   const copyUserCode = () => {
     if (user && 'userCode' in user && typeof user.userCode === 'string') {
       navigator.clipboard.writeText(user.userCode);
       setHasCopied(true);
       setTimeout(() => setHasCopied(false), 2000);
-      toast.success("Kullanıcı kodu panoya kopyalandı");
+      toast.success("User code copied to clipboard");
     } else {
-      toast.error("Kullanıcı kodu bulunamadı");
+      toast.error("User code not found");
     }
   };
   
   const handleLogout = async () => {
     try {
       await logout();
-      toast.success("Çıkış yapıldı");
+      toast.success("Logged out successfully");
       router.push("/login");
     } catch (error) {
-      console.error("Çıkış yapılırken hata:", error);
-      toast.error("Çıkış yapılamadı");
+      console.error("Error during logout:", error);
+      toast.error("Failed to log out");
     }
   };
   
-  // Kullanıcı yoksa veya oturum açmamışsa
+  // If user is not logged in
   if (!user || !firebaseUser) {
     return (
       <Layout>
         <div className="container mx-auto py-10">
           <Card>
             <CardHeader>
-              <CardTitle>Profil sayfası</CardTitle>
-              <CardDescription>Profil bilgilerinizi görüntülemek için giriş yapın</CardDescription>
+              <CardTitle>Profile page</CardTitle>
+              <CardDescription>Please log in to view your profile information</CardDescription>
             </CardHeader>
             <CardFooter>
-              <Button onClick={() => router.push("/login")}>Giriş Yap</Button>
+              <Button onClick={() => router.push("/login")}>Log In</Button>
             </CardFooter>
           </Card>
         </div>
@@ -91,14 +91,14 @@ export default function ProfilePage() {
     );
   }
   
-  // Kullanıcının sahip olduğu takımları hesapla
+  // Calculate user's owned teams
   const ownedTeams = teams.filter(team => team.ownerId === user.id);
   
   return (
     <Layout>
       <div className="container mx-auto py-10">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-          {/* Sol Profil Özeti Bölümü */}
+          {/* Left Profile Summary Section */}
           <div>
             <Card>
               <CardHeader className="text-center">
@@ -116,7 +116,7 @@ export default function ProfilePage() {
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Kullanıcı Kodu</span>
+                    <span className="text-sm font-medium">User Code</span>
                     <div className="flex items-center gap-2">
                       <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
                         {user.userCode || "N/A"}
@@ -135,15 +135,15 @@ export default function ProfilePage() {
                   <Separator />
                   
                   <div>
-                    <span className="text-sm font-medium block mb-2">Takım İstatistikleri</span>
+                    <span className="text-sm font-medium block mb-2">Team Statistics</span>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col items-center rounded-lg border p-2">
                         <span className="text-2xl font-bold">{teams.length}</span>
-                        <span className="text-xs text-muted-foreground">Toplam Takım</span>
+                        <span className="text-xs text-muted-foreground">Total Teams</span>
                       </div>
                       <div className="flex flex-col items-center rounded-lg border p-2">
                         <span className="text-2xl font-bold">{ownedTeams.length}</span>
-                        <span className="text-xs text-muted-foreground">Sahip Olduğunuz</span>
+                        <span className="text-xs text-muted-foreground">Owned Teams</span>
                       </div>
                     </div>
                   </div>
@@ -152,7 +152,7 @@ export default function ProfilePage() {
                   
                   <div className="pt-2 flex justify-center">
                     <Button variant="outline" className="w-full" onClick={handleLogout}>
-                      Çıkış Yap
+                      Log Out
                     </Button>
                   </div>
                 </div>
@@ -160,18 +160,18 @@ export default function ProfilePage() {
             </Card>
           </div>
           
-          {/* Sağ Taraftaki İçerik Alanı - Artık direkt Profil Bilgileri */}
+          {/* Right Content Area - Profile Information */}
           <div className="md:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle>Profil Bilgileri</CardTitle>
+                <CardTitle>Profile Information</CardTitle>
                 <CardDescription>
-                  Kişisel bilgilerinizi burada düzenleyebilirsiniz
+                  Edit your personal information here
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">İsim</Label>
+                  <Label htmlFor="name">Name</Label>
                   <Input 
                     id="name" 
                     value={displayName}
@@ -179,18 +179,18 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">E-posta</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input 
                     id="email" 
                     value={user.email}
                     disabled
                   />
                   <p className="text-xs text-muted-foreground">
-                    E-posta adresi değiştirilemez
+                    Email address cannot be changed
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="userCode">Kullanıcı Kodu</Label>
+                  <Label htmlFor="userCode">User Code</Label>
                   <div className="flex">
                     <Input 
                       id="userCode" 
@@ -208,7 +208,7 @@ export default function ProfilePage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Bu kodu takım üyelerine vererek sizi davet etmelerini sağlayabilirsiniz
+                    Share this code with team owners to be invited to their teams
                   </p>
                 </div>
               </CardContent>
@@ -218,7 +218,7 @@ export default function ProfilePage() {
                   disabled={isUpdating || !displayName.trim()}
                   className="ml-auto"
                 >
-                  {isUpdating ? "Güncelleniyor..." : "Değişiklikleri Kaydet"}
+                  {isUpdating ? "Updating..." : "Save Changes"}
                   {!isUpdating && <Save className="ml-2 h-4 w-4" />}
                 </Button>
               </CardFooter>

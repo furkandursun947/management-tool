@@ -38,8 +38,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const inviteMemberFormSchema = z.object({
-  userCode: z.string().min(1, "Kullanıcı kodu zorunludur"),
-  role: z.string().min(1, "Rol zorunludur"),
+  userCode: z.string().min(1, "User code is required"),
+  role: z.string().min(1, "Role is required"),
 });
 
 type FormValues = z.infer<typeof inviteMemberFormSchema>;
@@ -61,25 +61,25 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
     resolver: zodResolver(inviteMemberFormSchema),
     defaultValues: {
       userCode: "",
-      role: "Üye", // Varsayılan rol
+      role: "Member", // Default role
     },
   });
 
-  // Kullanıcı koduna göre arama
+  // Search user by code
   async function handleUserCodeSearch(userCode: string) {
     if (!userCode || !user) return;
     
     setSearchingUser(true);
     try {
       const foundUserData = await userService.getUserByCode(userCode);
-      console.log("Bulunan kullanıcı:", foundUserData);
+      console.log("Found user:", foundUserData);
       setFoundUser(foundUserData);
       if (!foundUserData) {
-        toast.error("Bu koda sahip bir kullanıcı bulunamadı");
+        toast.error("No user found with this code");
       }
     } catch (error) {
-      console.error('Kullanıcı aranırken hata oluştu:', error);
-      toast.error("Kullanıcı arama işlemi başarısız oldu");
+      console.error('Error searching for user:', error);
+      toast.error("User search failed");
       setFoundUser(null);
     } finally {
       setSearchingUser(false);
@@ -89,20 +89,20 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
   async function onSubmit(values: FormValues) {
     try {
       if (!foundUser) {
-        toast.error("Lütfen önce geçerli bir kullanıcı bulun");
+        toast.error("Please find a valid user first");
         return;
       }
 
       if (!user) {
-        toast.error("Üye davet etmek için giriş yapmalısınız");
+        toast.error("You must be logged in to invite members");
         return;
       }
 
       setLoading(true);
 
-      console.log("Takım daveti oluşturuluyor:", {
+      console.log("Creating team invitation:", {
         inviterId: user.uid,
-        inviterName: user.displayName || "Bilinmeyen Kullanıcı",
+        inviterName: user.displayName || "Unknown User",
         inviteeId: foundUser.id,
         inviteeName: foundUser.name,
         teamId,
@@ -110,10 +110,10 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
         role: values.role
       });
 
-      // Davet oluştur
+      // Create invitation
       await invitationService.createInvitation(user.uid, {
         inviterId: user.uid,
-        inviterName: user.displayName || "Bilinmeyen Kullanıcı",
+        inviterName: user.displayName || "Unknown User",
         inviterEmail: user.email || "",
         inviteeId: foundUser.id,
         inviteeName: foundUser.name,
@@ -122,13 +122,13 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
         teamName,
       });
 
-      // Eğer kullanıcının bir Firebase UID'si varsa, ek bir davet oluştur
+      // If the user has a Firebase UID, create an additional invitation
       if (foundUser.uid && foundUser.uid !== foundUser.id) {
-        console.log("Kullanıcının Firebase UID'si var:", foundUser.uid);
+        console.log("User has Firebase UID:", foundUser.uid);
         try {
           await invitationService.createInvitation(user.uid, {
             inviterId: user.uid,
-            inviterName: user.displayName || "Bilinmeyen Kullanıcı",
+            inviterName: user.displayName || "Unknown User",
             inviterEmail: user.email || "",
             inviteeId: foundUser.uid,
             inviteeName: foundUser.name,
@@ -136,20 +136,20 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
             teamId,
             teamName,
           });
-          console.log("Firebase UID ile ek davet oluşturuldu");
+          console.log("Additional invitation created with Firebase UID");
         } catch (err) {
-          console.error("Ek davet oluşturulurken hata:", err);
+          console.error("Error creating additional invitation:", err);
         }
       }
 
-      toast.success(`${foundUser.name} kullanıcısı "${teamName}" takımına davet edildi`);
+      toast.success(`${foundUser.name} has been invited to "${teamName}" team`);
       
       form.reset();
       setFoundUser(null);
       onOpenChange(false);
     } catch (error) {
-      console.error('Davet gönderilirken hata oluştu:', error);
-      toast.error("Davet gönderilemedi");
+      console.error('Error sending invitation:', error);
+      toast.error("Could not send invitation");
     } finally {
       setLoading(false);
     }
@@ -159,9 +159,9 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Takıma Üye Davet Et</DialogTitle>
+          <DialogTitle>Invite Team Member</DialogTitle>
           <DialogDescription>
-            Kullanıcı kodunu girerek "{teamName}" takımınıza yeni bir üye davet edin.
+            Enter a user code to invite a new member to "{teamName}" team.
           </DialogDescription>
         </DialogHeader>
 
@@ -173,20 +173,20 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="flex items-center gap-1">
-                    Kullanıcı Kodu
+                    User Code
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-80">
-                        <p>Kullanıcı kodları, her kullanıcının profil ayarlarında bulunur. Davet etmek istediğiniz kişiden benzersiz kodunu size vermesini isteyin.</p>
+                        <p>User codes can be found in each user's profile settings. Ask the person you want to invite to provide you with their unique code.</p>
                       </TooltipContent>
                     </Tooltip>
                   </FormLabel>
                   <div className="flex space-x-2">
                     <FormControl>
                       <Input 
-                        placeholder="Kullanıcı kodu girin" 
+                        placeholder="Enter user code" 
                         {...field} 
                         onChange={(e) => {
                           field.onChange(e);
@@ -200,7 +200,7 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
                       onClick={() => handleUserCodeSearch(field.value)}
                       disabled={searchingUser || !field.value}
                     >
-                      {searchingUser ? "Aranıyor..." : "Ara"}
+                      {searchingUser ? "Searching..." : "Search"}
                     </Button>
                   </div>
                   <FormMessage />
@@ -227,21 +227,21 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
               name="role"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Rol</FormLabel>
+                  <FormLabel>Role</FormLabel>
                   <FormControl>
                     <Select 
                       onValueChange={field.onChange} 
                       defaultValue={field.value}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Rol seçin" />
+                        <SelectValue placeholder="Select a role" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Üye">Üye</SelectItem>
-                        <SelectItem value="Yönetici">Yönetici</SelectItem>
-                        <SelectItem value="Gözlemci">Gözlemci</SelectItem>
-                        <SelectItem value="Geliştirici">Geliştirici</SelectItem>
-                        <SelectItem value="Tasarımcı">Tasarımcı</SelectItem>
+                        <SelectItem value="Member">Member</SelectItem>
+                        <SelectItem value="Admin">Admin</SelectItem>
+                        <SelectItem value="Observer">Observer</SelectItem>
+                        <SelectItem value="Developer">Developer</SelectItem>
+                        <SelectItem value="Designer">Designer</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormControl>
@@ -251,19 +251,16 @@ export function InviteTeamMemberModal({ teamId, teamName, open, onOpenChange }: 
             />
 
             <DialogFooter>
-              <Button 
-                type="submit" 
-                disabled={loading || !foundUser}
-              >
+              <Button type="submit" disabled={loading || !foundUser}>
                 {loading ? (
                   <>
                     <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground"></span>
-                    Gönderiliyor...
+                    Sending Invitation...
                   </>
                 ) : (
                   <>
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Davet Gönder
+                    Invite Member
                   </>
                 )}
               </Button>

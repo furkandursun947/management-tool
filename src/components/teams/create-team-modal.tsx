@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { useTeams } from "@/contexts/teams-context";
 
 const formSchema = z.object({
-  name: z.string().min(2, "Takım adı en az 2 karakter olmalıdır."),
+  name: z.string().min(2, "Team name must be at least 2 characters."),
   description: z.string().optional(),
 });
 
@@ -60,7 +60,7 @@ export function CreateTeamModal({ open, onOpenChange }: CreateTeamModalProps) {
       form.reset();
       onOpenChange(false);
     } catch (error) {
-      console.error("Takım oluşturulurken hata oluştu:", error);
+      console.error("Error creating team:", error);
     } finally {
       setLoading(false);
     }
@@ -70,9 +70,9 @@ export function CreateTeamModal({ open, onOpenChange }: CreateTeamModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Yeni Takım Oluştur</DialogTitle>
+          <DialogTitle>Create New Team</DialogTitle>
           <DialogDescription>
-            Yeni bir takım oluşturun ve takım üyelerini davet edin.
+            Create a new team and invite members.
           </DialogDescription>
         </DialogHeader>
 
@@ -83,9 +83,9 @@ export function CreateTeamModal({ open, onOpenChange }: CreateTeamModalProps) {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Takım Adı</FormLabel>
+                  <FormLabel>Team Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Takım adı girin" {...field} />
+                    <Input placeholder="Enter team name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -97,10 +97,10 @@ export function CreateTeamModal({ open, onOpenChange }: CreateTeamModalProps) {
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Açıklama</FormLabel>
+                  <FormLabel>Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Takımınızı açıklayın (isteğe bağlı)"
+                      placeholder="Describe your team (optional)"
                       className="resize-none"
                       {...field}
                     />
@@ -115,12 +115,12 @@ export function CreateTeamModal({ open, onOpenChange }: CreateTeamModalProps) {
                 {loading ? (
                   <>
                     <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground"></span>
-                    Oluşturuluyor...
+                    Creating...
                   </>
                 ) : (
                   <>
                     <Plus className="mr-2 h-4 w-4" />
-                    Takım Oluştur
+                    Create Team
                   </>
                 )}
               </Button>
