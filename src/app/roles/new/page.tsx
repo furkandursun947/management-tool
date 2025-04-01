@@ -24,6 +24,7 @@ import { rolesService } from "@/services/roles-service";
 import { useProjects } from "@/contexts/projects-context";
 import { toast } from "sonner";
 import { useRoles } from "@/contexts/roles-context";
+import { useFirebase } from "@/contexts/firebase-context";
 
 // Define available permissions
 const PERMISSIONS = [
@@ -85,6 +86,7 @@ export default function NewRolePage() {
   const router = useRouter();
   const { projects } = useProjects();
   const { refreshSystemRoles } = useRoles();
+  const { user } = useFirebase();
   const [loading, setLoading] = useState(false);
   
   // Initialize form
@@ -101,10 +103,15 @@ export default function NewRolePage() {
   async function onSubmit(values: RoleFormValues) {
     console.log("Form submitted with values:", values);
     try {
+      if (!user) {
+        toast.error("You must be logged in to create roles");
+        return;
+      }
+      
       setLoading(true);
       
       // Create the role
-      await rolesService.createSystemRole({
+      await rolesService.createSystemRole(user.uid, {
         name: values.name,
         description: values.description,
         permissions: values.permissions || [],

@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { rolesService, SystemRole } from "@/services/roles-service";
 import { useRoles } from "@/contexts/roles-context";
+import { useFirebase } from "@/contexts/firebase-context";
 import { toast } from "sonner";
 
 const formSchema = z.object({
@@ -46,6 +47,7 @@ export function ManageSystemRolesModal({
   onOpenChange,
 }: ManageSystemRolesModalProps) {
   const { systemRoles, refreshSystemRoles } = useRoles();
+  const { user } = useFirebase();
   const [loading, setLoading] = useState(false);
 
   const form = useForm<FormValues>({
@@ -59,8 +61,13 @@ export function ManageSystemRolesModal({
 
   async function onSubmit(values: FormValues) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to create roles");
+        return;
+      }
+      
       setLoading(true);
-      await rolesService.createSystemRole(values);
+      await rolesService.createSystemRole(user.uid, values);
       await refreshSystemRoles();
       form.reset();
       toast.success("System role created successfully");
@@ -74,8 +81,13 @@ export function ManageSystemRolesModal({
 
   async function handleDeleteRole(roleId: string) {
     try {
+      if (!user) {
+        toast.error("You must be logged in to delete roles");
+        return;
+      }
+      
       setLoading(true);
-      await rolesService.deleteSystemRole(roleId);
+      await rolesService.deleteSystemRole(user.uid, roleId);
       await refreshSystemRoles();
       toast.success("System role deleted successfully");
     } catch (error) {
